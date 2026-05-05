@@ -8,7 +8,7 @@ Importa un APU desde Excel y gestiona partidas, composiciones y presupuesto desd
 ## Requisitos
 
 - Node.js 20+
-- PostgreSQL 14+
+- Docker (para la base de datos)
 - npm 9+
 
 ---
@@ -22,13 +22,16 @@ git clone https://github.com/Arquinering-dev/brickly.git
 cd brickly
 ```
 
-### 2. Base de datos
+### 2. Base de datos (Docker)
 
-Crear la base de datos en PostgreSQL:
-
-```sql
-CREATE DATABASE brickly;
+```bash
+docker compose up -d
+# Levanta PostgreSQL en localhost:5432
+# Usuario: brickly / Contraseña: brickly / DB: brickly
 ```
+
+Para bajarla: `docker compose down`  
+Para bajarla y borrar los datos: `docker compose down -v`
 
 ### 3. Backend
 
@@ -37,18 +40,10 @@ cd backend
 npm install
 ```
 
-Crear el archivo `.env`:
+El `.env` ya viene configurado para Docker. Si lo necesitás recrear:
 
 ```bash
 cp .env.example .env
-```
-
-Editar `backend/.env` con tu conexión:
-
-```
-DATABASE_URL="postgresql://usuario:contraseña@localhost:5432/brickly"
-NODE_ENV="development"
-PORT=3000
 ```
 
 Ejecutar la migración:
