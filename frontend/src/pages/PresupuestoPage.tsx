@@ -74,8 +74,8 @@ export default function PresupuestoPage() {
               <th className="text-left px-4 py-3 font-medium text-gray-500 w-8"></th>
               <th className="text-left px-4 py-3 font-medium text-gray-500">Rubro / Partida</th>
               <th className="text-right px-4 py-3 font-medium text-blue-500">MAT</th>
-              <th className="text-right px-4 py-3 font-medium text-green-500">MO</th>
-              <th className="text-right px-4 py-3 font-medium text-orange-500">EQ</th>
+              <th className="text-right px-4 py-3 font-medium text-brand-500">MO</th>
+              <th className="text-right px-4 py-3 font-medium text-amber-500">EQ</th>
               <th className="text-right px-4 py-3 font-medium text-gray-700">Total</th>
             </tr>
           </thead>
@@ -85,15 +85,15 @@ export default function PresupuestoPage() {
                 <tr
                   key={grupo.rubro}
                   onClick={() => toggle(grupo.rubro)}
-                  className="border-b border-gray-100 cursor-pointer hover:bg-gray-50 bg-gray-50"
+                  className="border-b border-gray-100 cursor-pointer hover:bg-brand-50 bg-gray-50"
                 >
                   <td className="px-4 py-3 text-gray-400 text-xs">
                     {expanded.has(grupo.rubro) ? "▼" : "▶"}
                   </td>
                   <td className="px-4 py-3 font-semibold text-gray-800">{grupo.rubro}</td>
                   <td className="px-4 py-3 text-right text-blue-700">${fmt(grupo.matTotal)}</td>
-                  <td className="px-4 py-3 text-right text-green-700">${fmt(grupo.moTotal)}</td>
-                  <td className="px-4 py-3 text-right text-orange-700">${fmt(grupo.eqTotal)}</td>
+                  <td className="px-4 py-3 text-right text-brand-700">${fmt(grupo.moTotal)}</td>
+                  <td className="px-4 py-3 text-right text-amber-600">${fmt(grupo.eqTotal)}</td>
                   <td className="px-4 py-3 text-right font-bold text-gray-900">
                     ${fmt(grupo.total)}
                   </td>
@@ -114,10 +114,10 @@ export default function PresupuestoPage() {
                       <td className="px-4 py-2 text-right text-blue-600 text-xs">
                         ${fmt(linea.matTotal)}
                       </td>
-                      <td className="px-4 py-2 text-right text-green-600 text-xs">
+                      <td className="px-4 py-2 text-right text-brand-600 text-xs">
                         ${fmt(linea.moTotal)}
                       </td>
-                      <td className="px-4 py-2 text-right text-orange-600 text-xs">
+                      <td className="px-4 py-2 text-right text-amber-500 text-xs">
                         ${fmt(linea.eqTotal)}
                       </td>
                       <td className="px-4 py-2 text-right text-gray-700 text-xs">
@@ -135,10 +135,10 @@ export default function PresupuestoPage() {
               <td className="px-4 py-3 text-right font-bold text-blue-700">
                 ${fmt(data.grupos.reduce((a, g) => a + g.matTotal, 0))}
               </td>
-              <td className="px-4 py-3 text-right font-bold text-green-700">
+              <td className="px-4 py-3 text-right font-bold text-brand-700">
                 ${fmt(data.grupos.reduce((a, g) => a + g.moTotal, 0))}
               </td>
-              <td className="px-4 py-3 text-right font-bold text-orange-700">
+              <td className="px-4 py-3 text-right font-bold text-amber-600">
                 ${fmt(data.grupos.reduce((a, g) => a + g.eqTotal, 0))}
               </td>
               <td className="px-4 py-3 text-right font-bold text-gray-900 text-base">

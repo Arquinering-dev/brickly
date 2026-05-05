@@ -125,8 +125,8 @@ export default function PartidasPage() {
                   <td className="px-4 py-3 text-gray-500">{p.unidad}</td>
                   <td className="px-4 py-3 text-right text-gray-700">{fmt(p.rendimiento)}</td>
                   <td className="px-4 py-3 text-right text-blue-700">${fmt(p.matUnitario)}</td>
-                  <td className="px-4 py-3 text-right text-green-700">${fmt(p.moUnitario)}</td>
-                  <td className="px-4 py-3 text-right text-orange-700">${fmt(p.eqUnitario)}</td>
+                  <td className="px-4 py-3 text-right text-brand-600">${fmt(p.moUnitario)}</td>
+                  <td className="px-4 py-3 text-right text-amber-600">${fmt(p.eqUnitario)}</td>
                   <td className="px-4 py-3">
                     <div className="flex gap-1 justify-end">
                       <button

@@ -4,14 +4,22 @@ export default {
   theme: {
     extend: {
       colors: {
+        // Paleta Arquinering — verde corporativo extraído del logo
         brand: {
-          50: "#fef3ee",
-          100: "#fde3d2",
-          500: "#f27329",
-          600: "#e05d15",
-          700: "#b94910",
-          900: "#7a2e08",
+          50:  "#f0f7ee",
+          100: "#d9ecda",
+          200: "#b3d9b5",
+          300: "#7dbf82",
+          400: "#4fa356",
+          500: "#3d7c38",  // verde primario del logo
+          600: "#326930",
+          700: "#285428",
+          800: "#1f3f1f",
+          900: "#152b15",
         },
+      },
+      fontFamily: {
+        sans: ["Inter", "system-ui", "sans-serif"],
       },
     },
   },
