@@ -7,115 +7,120 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model APU {
-  id               String   @id @default(uuid())
-  nombre           String
-  fechaImportacion DateTime @default(now())
-  mesBaseCAC       String
-  cacBase          Decimal  @db.Decimal(12, 4)
-  coefCargasMO     Decimal  @db.Decimal(8, 4)
-  ggPercent        Decimal  @db.Decimal(8, 4)
-  bbPercent        Decimal  @db.Decimal(8, 4)
-
-  materiales       Material[]
-  manosDeObra      ManoDeObra[]
-  equipos          Equipo[]
-  partidas         Partida[]
-  presupuestoLineas PresupuestoLinea[]
-}
-
-model Material {
-  id          String  @id @default(uuid())
-  codigo      String  @unique
-  descripcion String
-  unidad      String
-  precio      Decimal @db.Decimal(14, 4)
-  proveedor   String?
-  categoria   String?
-  apuId       String
-
-  apu          APU                  @relation(fields: [apuId], references: [id], onDelete: Cascade)
-  composiciones ComposicionPartida[] @relation("MaterialComposicion")
-}
-
-model ManoDeObra {
-  id           String  @id @default(uuid())
-  codigo       String  @unique
-  descripcion  String
-  salarioDia   Decimal @db.Decimal(14, 4)
-  coefCargas   Decimal @db.Decimal(8, 4)
-  tipo         String
-  apuId        String
-
-  apu          APU                  @relation(fields: [apuId], references: [id], onDelete: Cascade)
-  composiciones ComposicionPartida[] @relation("ManoDeObraComposicion")
-}
-
-model Equipo {
-  id          String  @id @default(uuid())
-  codigo      String  @unique
-  descripcion String
-  costoTotal  Decimal @db.Decimal(14, 4)
-  vidaDias    Int
-  costoDia    Decimal @db.Decimal(14, 4)
-  apuId       String
-
-  apu          APU                  @relation(fields: [apuId], references: [id], onDelete: Cascade)
-  composiciones ComposicionPartida[] @relation("EquipoComposicion")
-}
-
-model Partida {
-  id                      String  @id @default(uuid())
-  codigo                  String  @unique
-  rubro                   String
-  descripcion             String
-  unidad                  String
-  rendimiento             Decimal @db.Decimal(14, 4)
-  pctDesperdicioConsumibles Decimal @db.Decimal(8, 4) @default(0)
-  pctDesperdicioGeneral   Decimal @db.Decimal(8, 4) @default(0)
-  gradoDificultad         Int     @default(1)
-  matUnitario             Decimal @db.Decimal(14, 4) @default(0)
-  moUnitario              Decimal @db.Decimal(14, 4) @default(0)
-  eqUnitario              Decimal @db.Decimal(14, 4) @default(0)
-  cdUnitario              Decimal @db.Decimal(14, 4) @default(0)
-  apuId                   String
-
-  apu              APU                @relation(fields: [apuId], references: [id], onDelete: Cascade)
-  composiciones    ComposicionPartida[]
-  presupuestoLineas PresupuestoLinea[]
-}
-
 enum TipoInsumo {
   MATERIAL
   MANO_DE_OBRA
   EQUIPO
+  SUBCONTRATO
 }
 
-model ComposicionPartida {
-  id               String     @id @default(uuid())
-  partidaId        String
+enum TipoPartida {
+  APU
+  SUBCONTRATO
+  COTIZACION_DIRECTA
+}
+
+enum EstadoObra {
+  EN_PRESUPUESTO
+  EN_CURSO
+  FINALIZADA
+}
+
+model Insumo {
+  id               String        @id @default(uuid())
+  codigo           String        @unique
+  descripcion      String
   tipo             TipoInsumo
-  insumoId         String
-  cantidadPorUnidad Decimal   @db.Decimal(14, 6)
-  pctDesperdicio   Decimal    @db.Decimal(8, 4) @default(0)
-  secuencia        Int        @default(0)
-
-  partida    Partida     @relation(fields: [partidaId], references: [id], onDelete: Cascade)
-  material   Material?   @relation("MaterialComposicion", fields: [insumoId], references: [id], map: "composicion_material_fk")
-  manoDeObra ManoDeObra? @relation("ManoDeObraComposicion", fields: [insumoId], references: [id], map: "composicion_mo_fk")
-  equipo     Equipo?     @relation("EquipoComposicion", fields: [insumoId], references: [id], map: "composicion_equipo_fk")
+  unidad           String
+  precioReferencia Decimal       @db.Decimal(18, 2)
+  proveedor        String?
+  categoria        String?
+  codigoOriginal   String?
+  fechaCotizacion  DateTime?
+  composiciones    Composicion[]
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
 }
 
-model PresupuestoLinea {
-  id        String  @id @default(uuid())
-  apuId     String
-  partidaId String
-  cantidad  Decimal @db.Decimal(14, 4)
-  matTotal  Decimal @db.Decimal(14, 4) @default(0)
-  moTotal   Decimal @db.Decimal(14, 4) @default(0)
-  eqTotal   Decimal @db.Decimal(14, 4) @default(0)
-  estado    String  @default("activo")
+model Partida {
+  id                String             @id @default(uuid())
+  codigo            String             @unique
+  descripcion       String
+  rubro             String
+  unidad            String
+  rendimiento       Decimal?           @db.Decimal(10, 4)
+  tipo              TipoPartida        @default(APU)
+  activa            Boolean            @default(true)
+  composiciones     Composicion[]
+  lineasPresupuesto LineaPresupuesto[]
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+}
 
-  apu     APU     @relation(fields: [apuId], references: [id], onDelete: Cascade)
-  partida Partida @relation(fields: [partidaId], references: [id], onDelete: Cascade)
+model Composicion {
+  id                String   @id @default(uuid())
+  partidaId         String
+  insumoId          String
+  cantidadPorUnidad Decimal  @db.Decimal(14, 6)
+  pctDesperdicio    Decimal  @db.Decimal(6, 4)
+  secuencia         Int      @default(0)
+  partida           Partida  @relation(fields: [partidaId], references: [id], onDelete: Cascade)
+  insumo            Insumo   @relation(fields: [insumoId], references: [id])
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model Obra {
+  id                String             @id @default(uuid())
+  nombre            String
+  codigo            String             @unique
+  fechaInicio       DateTime?
+  estado            EstadoObra         @default(EN_PRESUPUESTO)
+  presupuestos      PresupuestoHeader[]
+  lineasPresupuesto LineaPresupuesto[]
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+}
+
+model PresupuestoHeader {
+  id        String             @id @default(uuid())
+  obraId    String
+  fecha     DateTime
+  cacValor  Decimal            @db.Decimal(12, 2)
+  mesCac    String
+  estado    String             @default("vigente")
+  nombre    String?
+  version   String?
+  coefGGBB  Decimal?           @db.Decimal(8, 4)
+  obra      Obra               @relation(fields: [obraId], references: [id])
+  lineas    LineaPresupuesto[]
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+}
+
+model LineaPresupuesto {
+  id                     String            @id @default(uuid())
+  obraId                 String
+  presupuestoHeaderId    String
+  partidaId              String?
+  cantidad               Decimal           @db.Decimal(14, 4)
+  precioUnitarioSnapshot Decimal           @db.Decimal(18, 2)
+  tipo                   TipoPartida       @default(APU)
+  descripcionLibre       String?
+  estadoItem             String            @default("OK")
+  rubro                  String
+  subRubro               String?
+  itemNumero             String?
+  orden                  Int               @default(0)
+  matUd                  Decimal?          @db.Decimal(18, 2)
+  moUd                   Decimal?          @db.Decimal(18, 2)
+  eqUd                   Decimal?          @db.Decimal(18, 2)
+  precioVenta            Decimal?          @db.Decimal(18, 2)
+  fuente                 String?
+  apuLinkCodigo          String?
+  obra                   Obra              @relation(fields: [obraId], references: [id])
+  presupuestoHeader      PresupuestoHeader @relation(fields: [presupuestoHeaderId], references: [id])
+  partida                Partida?          @relation(fields: [partidaId], references: [id])
+  createdAt              DateTime          @default(now())
+  updatedAt              DateTime          @updatedAt
 }

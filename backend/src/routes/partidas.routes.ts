@@ -11,10 +11,15 @@ function qstr(val: unknown): string | undefined {
 router.get("/", async (req: Request, res: Response) => {
   try {
     const rubro = qstr(req.query.rubro);
+    const tipo = qstr(req.query.tipo) as "APU" | "SUBCONTRATO" | "COTIZACION_DIRECTA" | undefined;
     const search = qstr(req.query.search);
+    const activa = req.query.activa !== undefined ? req.query.activa !== "false" : undefined;
+
     const partidas = await prisma.partida.findMany({
       where: {
         ...(rubro ? { rubro } : {}),
+        ...(tipo ? { tipo } : {}),
+        ...(activa !== undefined ? { activa } : {}),
         ...(search
           ? {
               OR: [
@@ -24,10 +29,11 @@ router.get("/", async (req: Request, res: Response) => {
             }
           : {}),
       },
+      include: { _count: { select: { composiciones: true } } },
       orderBy: [{ rubro: "asc" }, { codigo: "asc" }],
     });
     res.json(partidas);
-  } catch (err) {
+  } catch {
     res.status(500).json({ error: "Error al listar partidas" });
   }
 });
@@ -39,11 +45,7 @@ router.get("/:id", async (req: Request, res: Response) => {
       include: {
         composiciones: {
           orderBy: { secuencia: "asc" },
-          include: {
-            material: true,
-            manoDeObra: true,
-            equipo: true,
-          },
+          include: { insumo: true },
         },
       },
     });
@@ -52,133 +54,112 @@ router.get("/:id", async (req: Request, res: Response) => {
       return;
     }
     res.json(partida);
-  } catch (err) {
+  } catch {
     res.status(500).json({ error: "Error al obtener partida" });
   }
 });
 
 router.post("/", async (req: Request, res: Response) => {
   try {
-    const {
-      codigo, rubro, descripcion, unidad, rendimiento,
-      pctDesperdicioConsumibles, pctDesperdicioGeneral,
-      gradoDificultad, matUnitario, moUnitario, eqUnitario, cdUnitario, apuId,
-    } = req.body;
-
-    if (!codigo || !descripcion || !apuId) {
-      res.status(400).json({ error: "codigo, descripcion y apuId son requeridos" });
+    const { codigo, descripcion, rubro, unidad, rendimiento, tipo } = req.body;
+    if (!codigo || !descripcion) {
+      res.status(400).json({ error: "codigo y descripcion son requeridos" });
       return;
     }
-
     const partida = await prisma.partida.create({
       data: {
-        codigo, rubro: rubro || "", descripcion, unidad: unidad || "",
-        rendimiento: rendimiento || 1,
-        pctDesperdicioConsumibles: pctDesperdicioConsumibles || 0,
-        pctDesperdicioGeneral: pctDesperdicioGeneral || 0,
-        gradoDificultad: gradoDificultad || 1,
-        matUnitario: matUnitario || 0,
-        moUnitario: moUnitario || 0,
-        eqUnitario: eqUnitario || 0,
-        cdUnitario: cdUnitario || 0,
-        apuId,
+        codigo,
+        descripcion,
+        rubro: rubro ?? "",
+        unidad: unidad ?? "",
+        rendimiento: rendimiento ?? null,
+        tipo: tipo ?? "APU",
       },
     });
     res.status(201).json(partida);
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Error interno";
-    res.status(500).json({ error: message });
+    res.status(500).json({ error: err instanceof Error ? err.message : "Error interno" });
   }
 });
 
 router.put("/:id", async (req: Request, res: Response) => {
   try {
-    const {
-      codigo, rubro, descripcion, unidad, rendimiento,
-      pctDesperdicioConsumibles, pctDesperdicioGeneral,
-      gradoDificultad, matUnitario, moUnitario, eqUnitario, cdUnitario,
-    } = req.body;
-
+    const { descripcion, rubro, unidad, rendimiento, tipo, activa } = req.body;
     const partida = await prisma.partida.update({
       where: { id: req.params.id },
       data: {
-        ...(codigo !== undefined && { codigo }),
-        ...(rubro !== undefined && { rubro }),
         ...(descripcion !== undefined && { descripcion }),
+        ...(rubro !== undefined && { rubro }),
         ...(unidad !== undefined && { unidad }),
         ...(rendimiento !== undefined && { rendimiento }),
-        ...(pctDesperdicioConsumibles !== undefined && { pctDesperdicioConsumibles }),
-        ...(pctDesperdicioGeneral !== undefined && { pctDesperdicioGeneral }),
-        ...(gradoDificultad !== undefined && { gradoDificultad }),
-        ...(matUnitario !== undefined && { matUnitario }),
-        ...(moUnitario !== undefined && { moUnitario }),
-        ...(eqUnitario !== undefined && { eqUnitario }),
-        ...(cdUnitario !== undefined && { cdUnitario }),
+        ...(tipo !== undefined && { tipo }),
+        ...(activa !== undefined && { activa }),
       },
     });
     res.json(partida);
-  } catch (err) {
+  } catch {
     res.status(500).json({ error: "Error al actualizar partida" });
   }
 });
 
 router.delete("/:id", async (req: Request, res: Response) => {
   try {
-    await prisma.partida.delete({ where: { id: req.params.id } });
+    await prisma.partida.update({
+      where: { id: req.params.id },
+      data: { activa: false },
+    });
     res.status(204).send();
-  } catch (err) {
-    res.status(500).json({ error: "Error al eliminar partida" });
+  } catch {
+    res.status(500).json({ error: "Error al desactivar partida" });
   }
 });
 
-// Composición endpoints
 router.post("/:id/composicion", async (req: Request, res: Response) => {
   try {
-    const { tipo, insumoId, cantidadPorUnidad, pctDesperdicio, secuencia } = req.body;
-    if (!tipo || !insumoId) {
-      res.status(400).json({ error: "tipo e insumoId son requeridos" });
+    const { insumoId, cantidadPorUnidad, pctDesperdicio, secuencia } = req.body;
+    if (!insumoId) {
+      res.status(400).json({ error: "insumoId es requerido" });
       return;
     }
-    const comp = await prisma.composicionPartida.create({
+    const comp = await prisma.composicion.create({
       data: {
         partidaId: req.params.id,
-        tipo,
         insumoId,
-        cantidadPorUnidad: cantidadPorUnidad || 0,
-        pctDesperdicio: pctDesperdicio || 0,
-        secuencia: secuencia || 0,
+        cantidadPorUnidad: cantidadPorUnidad ?? 0,
+        pctDesperdicio: pctDesperdicio ?? 0,
+        secuencia: secuencia ?? 0,
       },
-      include: { material: true, manoDeObra: true, equipo: true },
+      include: { insumo: true },
     });
     res.status(201).json(comp);
   } catch (err) {
-    res.status(500).json({ error: "Error al agregar insumo" });
+    res.status(500).json({ error: err instanceof Error ? err.message : "Error al agregar insumo" });
   }
 });
 
 router.put("/:id/composicion/:compId", async (req: Request, res: Response) => {
   try {
     const { cantidadPorUnidad, pctDesperdicio, secuencia } = req.body;
-    const comp = await prisma.composicionPartida.update({
+    const comp = await prisma.composicion.update({
       where: { id: req.params.compId },
       data: {
         ...(cantidadPorUnidad !== undefined && { cantidadPorUnidad }),
         ...(pctDesperdicio !== undefined && { pctDesperdicio }),
         ...(secuencia !== undefined && { secuencia }),
       },
-      include: { material: true, manoDeObra: true, equipo: true },
+      include: { insumo: true },
     });
     res.json(comp);
-  } catch (err) {
-    res.status(500).json({ error: "Error al actualizar insumo" });
+  } catch {
+    res.status(500).json({ error: "Error al actualizar composición" });
   }
 });
 
 router.delete("/:id/composicion/:compId", async (req: Request, res: Response) => {
   try {
-    await prisma.composicionPartida.delete({ where: { id: req.params.compId } });
+    await prisma.composicion.delete({ where: { id: req.params.compId } });
     res.status(204).send();
-  } catch (err) {
+  } catch {
     res.status(500).json({ error: "Error al eliminar insumo" });
   }
 });
