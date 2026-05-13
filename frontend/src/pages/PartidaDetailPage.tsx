@@ -31,12 +31,13 @@ interface Partida {
   composiciones: Composicion[];
 }
 
-type Tab = "MATERIAL" | "MANO_DE_OBRA" | "EQUIPO";
+type Tab = "MATERIAL" | "MANO_DE_OBRA" | "EQUIPO" | "SUBCONTRATO";
 
 const TAB_LABELS: Record<Tab, string> = {
   MATERIAL: "Materiales",
   MANO_DE_OBRA: "Mano de Obra",
   EQUIPO: "Equipos",
+  SUBCONTRATO: "Subcontratos",
 };
 
 function fmt(n: number, decimals = 4) {
@@ -68,7 +69,7 @@ function AddInsumoModal({
 
   const handleAdd = () => {
     if (!selected) return;
-    onAdd(selected.id, parseFloat(cantidad) || 0, parseFloat(pct) || 0);
+    onAdd(selected.id, parseFloat(cantidad) || 0, (parseFloat(pct) || 0) / 100);
   };
 
   return (
@@ -80,7 +81,7 @@ function AddInsumoModal({
         </div>
 
         <div className="flex gap-1 mb-3">
-          {(["MATERIAL", "MANO_DE_OBRA", "EQUIPO"] as Tab[]).map((t) => (
+          {(["MATERIAL", "MANO_DE_OBRA", "EQUIPO", "SUBCONTRATO"] as Tab[]).map((t) => (
             <button
               key={t}
               onClick={() => { setTipo(t); setSelected(null); }}
@@ -163,12 +164,14 @@ function AddInsumoModal({
 function ComposicionTable({
   tab,
   rows,
+  rendimiento,
   onUpdate,
   onDelete,
   onAddClick,
 }: {
   tab: Tab;
   rows: Composicion[];
+  rendimiento: number | null;
   onUpdate: (id: string, cant: number, pct: number) => void;
   onDelete: (id: string) => void;
   onAddClick: () => void;
@@ -181,11 +184,11 @@ function ComposicionTable({
   const startEdit = (c: Composicion) => {
     setEditId(c.id);
     setEditCant(String(c.cantidadPorUnidad));
-    setEditPct(String(c.pctDesperdicio));
+    setEditPct(String(Number(c.pctDesperdicio) * 100));
   };
   const saveEdit = () => {
     if (!editId) return;
-    onUpdate(editId, parseFloat(editCant) || 0, parseFloat(editPct) || 0);
+    onUpdate(editId, parseFloat(editCant) || 0, (parseFloat(editPct) || 0) / 100);
     setEditId(null);
   };
 
@@ -212,8 +215,12 @@ function ComposicionTable({
             ) : (
               filtered.map((c) => {
                 const isEditing = editId === c.id;
-                const costoUd =
-                  Number(c.cantidadPorUnidad) * (1 + Number(c.pctDesperdicio) / 100) * Number(c.insumo.precioReferencia);
+                const rend = rendimiento ? Number(rendimiento) : 0;
+                const usaRend = c.insumo.tipo === "MANO_DE_OBRA" || c.insumo.tipo === "EQUIPO";
+                const cantUd = usaRend
+                  ? (rend > 0 ? Number(c.cantidadPorUnidad) / rend : Number(c.cantidadPorUnidad))
+                  : Number(c.cantidadPorUnidad) * (1 + Number(c.pctDesperdicio));
+                const costoUd = cantUd * Number(c.insumo.precioReferencia);
                 return (
                   <tr key={c.id} className="border-b border-gray-50">
                     <td className="px-3 py-2 font-mono text-xs text-gray-500">{c.insumo.codigo}</td>
@@ -228,7 +235,7 @@ function ComposicionTable({
                       {isEditing ? (
                         <input type="number" value={editPct} onChange={(e) => setEditPct(e.target.value)}
                           className="w-20 border border-gray-300 rounded px-2 py-0.5 text-right text-xs" />
-                      ) : `${Number(c.pctDesperdicio).toFixed(1)}%`}
+                      ) : `${(Number(c.pctDesperdicio) * 100).toFixed(1)}%`}
                     </td>
                     <td className="px-3 py-2 text-right text-gray-500 text-xs">
                       ${Number(c.insumo.precioReferencia).toLocaleString("es-AR", { minimumFractionDigits: 2 })}
@@ -397,7 +404,7 @@ export default function PartidaDetailPage() {
         <div className="bg-white rounded-xl border border-gray-200 p-5">
           <h2 className="font-semibold text-gray-700 mb-4">Composición</h2>
           <div className="flex gap-1 border-b border-gray-200 mb-4">
-            {(["MATERIAL", "MANO_DE_OBRA", "EQUIPO"] as Tab[]).map((t) => (
+            {(["MATERIAL", "MANO_DE_OBRA", "EQUIPO", "SUBCONTRATO"] as Tab[]).map((t) => (
               <button
                 key={t}
                 onClick={() => setActiveTab(t)}
@@ -412,6 +419,7 @@ export default function PartidaDetailPage() {
           <ComposicionTable
             tab={activeTab}
             rows={partida.composiciones}
+            rendimiento={partida.rendimiento}
             onUpdate={updateComposicion}
             onDelete={deleteComposicion}
             onAddClick={() => setShowAddModal(true)}

@@ -138,7 +138,8 @@ function parseEquipos(sheet: XLSX.WorkSheet, errors: ParseError[]): InsumoRow[] 
       tipo: "EQUIPO",
       unidad: safeStr(getField(row, ["unidad", "ud"], 2)) || "día",
       precioReferencia: safeNum(
-        getField(row, ["costo/día", "costodía", "costo dia", "costoDia", "costo/dia"], 4) ??
+        getField(row, ["precio/día", "precio/dia", "preciodia", "precio dia", "precio por dia", "precio"], 5) ??
+        getField(row, ["costo/día", "costo/dia", "costodia", "costo dia"], 5) ??
         getField(row, ["costo total", "costoTotal"], 2)
       ),
     });
@@ -158,6 +159,49 @@ function parsePartidas(sheet: XLSX.WorkSheet, errors: ParseError[]): PartidaRow[
       descripcion: safeStr(getField(row, ["descripción", "descripcion", "desc"], 2)),
       unidad: safeStr(getField(row, ["unidad", "ud"], 3)),
       rendimiento: safeNum(getField(row, ["rendimiento", "rend"], 4), 1),
+    });
+  });
+  return result;
+}
+
+function generateSubCode(rubro: string, tarea: string): string {
+  const rubroSlug = rubro.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4);
+  const tareaSlug = tarea.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12);
+  return `SC-${rubroSlug}-${tareaSlug}`;
+}
+
+function parseSubcontratos(sheet: XLSX.WorkSheet, errors: ParseError[]): InsumoRow[] {
+  const rows = sheetToRows(sheet);
+  const result: InsumoRow[] = [];
+  const seenCodes = new Set<string>();
+  rows.forEach((row, i) => {
+    const rubro = safeStr(getField(row, ["rubro"], 0));
+    const tarea = safeStr(getField(row, ["tarea"], 1));
+    if (!rubro || !tarea) return;
+    const precio = safeNum(getField(row, ["pu actualizado", "precio", "importe"], 4));
+    if (precio <= 0) {
+      errors.push({ sheet: "SUBCONTRATOS", row: i + 2, field: "precio", message: `Precio inválido en fila ${i + 2}, ${rubro}/${tarea}` });
+    }
+    let codigo = generateSubCode(rubro, tarea);
+    // resolve collisions by appending a counter suffix
+    if (seenCodes.has(codigo)) {
+      let suffix = 2;
+      while (seenCodes.has(`${codigo}-${suffix}`)) suffix++;
+      codigo = `${codigo}-${suffix}`;
+    }
+    seenCodes.add(codigo);
+    const fechaStr = safeStr(getField(row, ["fecha act", "fecha actualiz"], 5));
+    const fechaCotizacion = fechaStr ? new Date(fechaStr) : undefined;
+    result.push({
+      codigo,
+      descripcion: tarea,
+      tipo: "SUBCONTRATO" as InsumoRow["tipo"],
+      unidad: safeStr(getField(row, ["ud", "unidad"], 3)) || "gl",
+      precioReferencia: precio,
+      proveedor: safeStr(getField(row, ["contratista", "proveedor"], 2)) || undefined,
+      categoria: rubro,
+      codigoOriginal: `${rubro}|${tarea}`,
+      fechaCotizacion: fechaCotizacion && !isNaN(fechaCotizacion.getTime()) ? fechaCotizacion : undefined,
     });
   });
   return result;
@@ -243,11 +287,14 @@ export function parseAPUExcel(buffer: Buffer): { data: ParsedAPU | null; errors:
   const composiciones = parseComposicion(getSheet("COMPOSICIÓN"), errors);
 
   const subPRYKey = workbook.SheetNames.find((s) => s.toUpperCase() === "SUBCONTRATOS_PRY");
-  const subcontratos = subPRYKey ? parseSubcontratosPRY(workbook.Sheets[subPRYKey], errors) : [];
+  const subcontratosPRY = subPRYKey ? parseSubcontratosPRY(workbook.Sheets[subPRYKey], errors) : [];
+
+  const subKey = workbook.SheetNames.find((s) => s.toUpperCase() === "SUBCONTRATOS");
+  const subcontratos = subKey ? parseSubcontratos(workbook.Sheets[subKey], errors) : [];
 
   return {
     data: {
-      insumos: [...materiales, ...manosDeObra, ...equipos, ...subcontratos],
+      insumos: [...materiales, ...manosDeObra, ...equipos, ...subcontratosPRY, ...subcontratos],
       partidas,
       composiciones,
     },

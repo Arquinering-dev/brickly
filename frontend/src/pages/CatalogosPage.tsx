@@ -1,4 +1,7 @@
 import { useState, useEffect } from "react";
+import { Paginador } from "../components/Paginador";
+
+const PER_PAGE = 25;
 
 interface Insumo {
   id: string;
@@ -32,6 +35,9 @@ export default function CatalogosPage() {
   const [insumos, setInsumos] = useState<Insumo[]>([]);
   const [counts, setCounts] = useState<Partial<Record<Tab, number>>>({});
   const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState(1);
+
+  useEffect(() => { setPage(1); }, [tab, search]);
 
   useEffect(() => {
     setLoading(true);
@@ -55,6 +61,7 @@ export default function CatalogosPage() {
     }`;
 
   const colSpanFull = tab === "MATERIAL" ? 6 : tab === "SUBCONTRATO" ? 5 : 4;
+  const paginados = insumos.slice((page - 1) * PER_PAGE, page * PER_PAGE);
 
   return (
     <div className="p-8">
@@ -108,7 +115,7 @@ export default function CatalogosPage() {
                   </td>
                 </tr>
               ) : (
-                insumos.map((ins) => (
+                paginados.map((ins) => (
                   <tr key={ins.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                     <td className="px-4 py-2 font-mono text-xs text-gray-500">{ins.codigo}</td>
                     <td className="px-4 py-2 text-gray-800">{ins.descripcion}</td>
@@ -128,6 +135,7 @@ export default function CatalogosPage() {
               )}
             </tbody>
           </table>
+          <Paginador total={insumos.length} page={page} perPage={PER_PAGE} onChange={setPage} />
         </div>
       )}
     </div>

@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import { Paginador } from "../components/Paginador";
+
+const PER_PAGE = 25;
 
 interface Partida {
   id: string;
@@ -27,6 +30,7 @@ export default function PartidasPage() {
   const [rubro, setRubro] = useState("");
   const [tipo, setTipo] = useState("");
   const [rubros, setRubros] = useState<string[]>([]);
+  const [page, setPage] = useState(1);
 
   const fetchPartidas = useCallback(async () => {
     setLoading(true);
@@ -48,10 +52,14 @@ export default function PartidasPage() {
     return () => clearTimeout(t);
   }, [fetchPartidas]);
 
+  useEffect(() => { setPage(1); }, [search, rubro, tipo]);
+
   const desactivar = async (id: string) => {
     await fetch(`/api/partidas/${id}`, { method: "DELETE" });
     fetchPartidas();
   };
+
+  const paginadas = partidas.slice((page - 1) * PER_PAGE, page * PER_PAGE);
 
   return (
     <div className="p-8">
@@ -110,7 +118,7 @@ export default function PartidasPage() {
             ) : partidas.length === 0 ? (
               <tr><td colSpan={8} className="text-center py-12 text-gray-400">No hay partidas. Importá un APU primero.</td></tr>
             ) : (
-              partidas.map((p) => {
+              paginadas.map((p) => {
                 const badge = TIPO_BADGE[p.tipo] ?? TIPO_BADGE.APU;
                 return (
                   <tr key={p.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
@@ -151,6 +159,7 @@ export default function PartidasPage() {
             )}
           </tbody>
         </table>
+        <Paginador total={partidas.length} page={page} perPage={PER_PAGE} onChange={setPage} />
       </div>
     </div>
   );

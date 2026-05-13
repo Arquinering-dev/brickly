@@ -3,6 +3,24 @@ import prisma from "../prisma/client";
 
 const router = Router();
 
+// Cantidad consumida del insumo para una línea de presupuesto.
+// MO/EQ: días = (cantPorUd / rendimiento) × cantLínea  — rendimiento viene de PARTIDAS (unidades de partida / día).
+// MAT/SUB: cantPorUd × (1+pctDesp) × cantLínea
+function calcCantInsumo(
+  tipoInsumo: string,
+  cantidadPorUnidad: number,
+  pctDesperdicio: number,
+  rendimiento: number | null | undefined,
+  cantLinea: number
+): number {
+  if (tipoInsumo === "MANO_DE_OBRA" || tipoInsumo === "EQUIPO") {
+    const rend = Number(rendimiento) || 0;
+    if (rend > 0) return (cantidadPorUnidad / rend) * cantLinea;
+    return cantidadPorUnidad * cantLinea;
+  }
+  return cantidadPorUnidad * (1 + pctDesperdicio) * cantLinea;
+}
+
 router.get("/", async (_req: Request, res: Response) => {
   try {
     const obras = await prisma.obra.findMany({
@@ -107,12 +125,16 @@ router.get("/:id/presupuesto", async (req: Request, res: Response) => {
         lineMO = Number(linea.moUd ?? 0) * cant;
         lineEQ = Number(linea.eqUd ?? 0) * cant;
       } else if (linea.partida?.composiciones.length) {
+        const rend = linea.partida.rendimiento ? Number(linea.partida.rendimiento) : null;
         for (const comp of linea.partida.composiciones) {
-          const compCost =
-            Number(comp.cantidadPorUnidad) *
-            (1 + Number(comp.pctDesperdicio)) *
-            Number(comp.insumo.precioReferencia) *
-            cant;
+          const cantInsumo = calcCantInsumo(
+            comp.insumo.tipo,
+            Number(comp.cantidadPorUnidad),
+            Number(comp.pctDesperdicio),
+            rend,
+            cant
+          );
+          const compCost = cantInsumo * Number(comp.insumo.precioReferencia);
           if (comp.insumo.tipo === "MATERIAL") lineMat += compCost;
           else if (comp.insumo.tipo === "MANO_DE_OBRA") lineMO += compCost;
           else if (comp.insumo.tipo === "EQUIPO") lineEQ += compCost;
@@ -150,16 +172,27 @@ router.get("/:id/presupuesto", async (req: Request, res: Response) => {
         estadoItem: linea.estadoItem,
         partidaId: linea.partidaId,
         apuLinkCodigo: linea.apuLinkCodigo ?? null,
-        composicion: linea.partida?.composiciones.map((c) => ({
-          insumo: c.insumo.descripcion,
-          codigo: c.insumo.codigo,
-          tipo: c.insumo.tipo,
-          cantidadPorUnidad: Number(c.cantidadPorUnidad),
-          pctDesperdicio: Number(c.pctDesperdicio),
-          precioReferencia: Number(c.insumo.precioReferencia),
-          cantidadTotal: Number(c.cantidadPorUnidad) * (1 + Number(c.pctDesperdicio)) * cant,
-          costoTotal: Number(c.cantidadPorUnidad) * (1 + Number(c.pctDesperdicio)) * Number(c.insumo.precioReferencia) * cant,
-        })) ?? [],
+        composicion: linea.partida?.composiciones.map((c) => {
+          const rend = linea.partida?.rendimiento ? Number(linea.partida.rendimiento) : null;
+          const cantTotal = calcCantInsumo(
+            c.insumo.tipo,
+            Number(c.cantidadPorUnidad),
+            Number(c.pctDesperdicio),
+            rend,
+            cant
+          );
+          return {
+            insumo: c.insumo.descripcion,
+            codigo: c.insumo.codigo,
+            tipo: c.insumo.tipo,
+            unidad: c.insumo.unidad,
+            cantidadPorUnidad: Number(c.cantidadPorUnidad),
+            pctDesperdicio: Number(c.pctDesperdicio),
+            precioReferencia: Number(c.insumo.precioReferencia),
+            cantidadTotal: cantTotal,
+            costoTotal: cantTotal * Number(c.insumo.precioReferencia),
+          };
+        }) ?? [],
       });
     }
 
@@ -209,16 +242,18 @@ router.get("/:id/planificacion", async (req: Request, res: Response) => {
     });
     const rubros = rubroRows.map((r) => r.rubro).filter(Boolean);
 
-    if (!rubroParam) {
+    const incluirTodo = req.query.all === "1" || req.query.all === "true";
+
+    if (!rubroParam && !incluirTodo) {
       res.json({ obra: { id: obra.id, nombre: obra.nombre, codigo: obra.codigo }, rubros, rubro: null });
       return;
     }
 
-    // Lines for selected rubro
+    // Lines for selected rubro (or all if incluirTodo)
     const lineas = await prisma.lineaPresupuesto.findMany({
       where: {
         obraId: obra.id,
-        rubro: rubroParam,
+        ...(rubroParam ? { rubro: rubroParam } : {}),
         ...(header ? { presupuestoHeaderId: header.id } : {}),
       },
       include: {
@@ -259,9 +294,16 @@ router.get("/:id/planificacion", async (req: Request, res: Response) => {
         continue;
       }
 
+      const rend = linea.partida.rendimiento ? Number(linea.partida.rendimiento) : null;
       for (const comp of linea.partida.composiciones) {
         const ins = comp.insumo;
-        const cantInsumo = Number(comp.cantidadPorUnidad) * (1 + Number(comp.pctDesperdicio)) * cant;
+        const cantInsumo = calcCantInsumo(
+          ins.tipo,
+          Number(comp.cantidadPorUnidad),
+          Number(comp.pctDesperdicio),
+          rend,
+          cant
+        );
         const costoInsumo = cantInsumo * Number(ins.precioReferencia);
 
         if (aggrMap.has(ins.codigo)) {
@@ -295,7 +337,7 @@ router.get("/:id/planificacion", async (req: Request, res: Response) => {
     res.json({
       obra: { id: obra.id, nombre: obra.nombre, codigo: obra.codigo },
       rubros,
-      rubro: rubroParam,
+      rubro: rubroParam ?? null,
       pctAvance,
       lineasTotal: lineas.length,
       lineasSinComposicion,

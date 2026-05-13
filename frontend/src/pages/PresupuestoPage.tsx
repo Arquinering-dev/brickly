@@ -10,6 +10,7 @@ interface ComposicionDetalle {
   insumo: string;
   codigo: string;
   tipo: "MATERIAL" | "MANO_DE_OBRA" | "EQUIPO" | "SUBCONTRATO";
+  unidad: string;
   cantidadPorUnidad: number;
   pctDesperdicio: number;
   precioReferencia: number;
@@ -234,6 +235,9 @@ export default function PresupuestoPage() {
                   <th className="text-right px-3 py-3 font-medium text-blue-400 w-28">MAT/ud</th>
                   <th className="text-right px-3 py-3 font-medium text-brand-400 w-28">MO/ud</th>
                   <th className="text-right px-3 py-3 font-medium text-amber-400 w-28">EQ/ud</th>
+                  <th className="text-right px-3 py-3 font-medium text-blue-500 w-32">MAT total</th>
+                  <th className="text-right px-3 py-3 font-medium text-brand-500 w-32">MO total</th>
+                  <th className="text-right px-3 py-3 font-medium text-amber-500 w-32">EQ total</th>
                   <th className="text-right px-3 py-3 font-medium text-gray-500 w-32">CD/ud</th>
                   <th className="text-right px-3 py-3 font-medium text-gray-700 w-36">Total CD</th>
                   {showPV && (
@@ -256,9 +260,12 @@ export default function PresupuestoPage() {
                       <td className="px-3 py-3 font-semibold text-gray-800 uppercase text-xs tracking-wide" colSpan={3}>
                         {grupo.nombre}
                       </td>
-                      <td className="px-3 py-3 text-right text-xs text-blue-500">${fmt(grupo.totalMat)}</td>
-                      <td className="px-3 py-3 text-right text-xs text-brand-500">${fmt(grupo.totalMO)}</td>
-                      <td className="px-3 py-3 text-right text-xs text-amber-500">${fmt(grupo.totalEQ)}</td>
+                      <td></td>
+                      <td></td>
+                      <td></td>
+                      <td className="px-3 py-3 text-right text-xs font-semibold text-blue-600">${fmt(grupo.totalMat)}</td>
+                      <td className="px-3 py-3 text-right text-xs font-semibold text-brand-600">${fmt(grupo.totalMO)}</td>
+                      <td className="px-3 py-3 text-right text-xs font-semibold text-amber-600">${fmt(grupo.totalEQ)}</td>
                       <td></td>
                       <td className="px-3 py-3 text-right font-bold text-gray-900">${fmt(grupo.totalRubro)}</td>
                       {showPV && (
@@ -295,6 +302,9 @@ export default function PresupuestoPage() {
                           <td className="px-3 py-2 text-right text-amber-500 text-xs">
                             {linea.eqUd !== null ? `$${fmt(linea.eqUd)}` : "—"}
                           </td>
+                          <td className="px-3 py-2 text-right text-blue-600 text-xs">${fmt(linea.matTotal)}</td>
+                          <td className="px-3 py-2 text-right text-brand-600 text-xs">${fmt(linea.moTotal)}</td>
+                          <td className="px-3 py-2 text-right text-amber-600 text-xs">${fmt(linea.eqTotal)}</td>
                           <td className="px-3 py-2 text-right text-gray-600 text-xs font-medium">
                             ${fmt(linea.precioUnitario)}
                           </td>
@@ -310,32 +320,32 @@ export default function PresupuestoPage() {
 
                         {expandedLinea.has(linea.id) && linea.composicion.length > 0 && (
                           <tr key={`comp-${linea.id}`} className="border-b border-gray-50 bg-gray-50/50">
-                            <td colSpan={showPV ? 10 : 9} className="px-3 pb-3 pt-1 pl-14">
+                            <td colSpan={showPV ? 13 : 12} className="px-3 pb-3 pt-1 pl-14">
                               <table className="w-full text-xs">
                                 <thead>
                                   <tr className="text-gray-400">
-                                    <th className="text-left py-1 font-medium">Código</th>
-                                    <th className="text-left py-1 font-medium">Insumo</th>
                                     <th className="text-left py-1 font-medium">Tipo</th>
-                                    <th className="text-right py-1 font-medium">Cant/ud</th>
-                                    <th className="text-right py-1 font-medium">Desp.</th>
-                                    <th className="text-right py-1 font-medium">Cant. total</th>
-                                    <th className="text-right py-1 font-medium">Precio ref.</th>
+                                    <th className="text-left py-1 font-medium">Descripción</th>
+                                    <th className="text-left py-1 font-medium">Ud.</th>
+                                    <th className="text-right py-1 font-medium">Cant. requerida</th>
                                     <th className="text-right py-1 font-medium">Costo total</th>
                                   </tr>
                                 </thead>
                                 <tbody>
-                                  {linea.composicion.map((comp, ci) => (
+                                  {[...linea.composicion].sort((a, b) => {
+                                    const order = { MATERIAL: 0, MANO_DE_OBRA: 1, EQUIPO: 2, SUBCONTRATO: 3 } as const;
+                                    return (order[a.tipo] ?? 99) - (order[b.tipo] ?? 99);
+                                  }).map((comp, ci) => (
                                     <tr key={ci} className="border-t border-gray-100">
-                                      <td className="py-1 font-mono text-gray-400">{comp.codigo}</td>
-                                      <td className="py-1 text-gray-600">{comp.insumo}</td>
                                       <td className={`py-1 font-medium ${TIPO_COMP_CLASS[comp.tipo] ?? "text-gray-500"}`}>
                                         {TIPO_COMP_LABEL[comp.tipo] ?? comp.tipo}
                                       </td>
-                                      <td className="py-1 text-right text-gray-500">{fmt(comp.cantidadPorUnidad, 4)}</td>
-                                      <td className="py-1 text-right text-gray-500">{(comp.pctDesperdicio * 100).toFixed(1)}%</td>
+                                      <td className="py-1 text-gray-600">
+                                        <span className="font-mono text-gray-400 mr-2">{comp.codigo}</span>
+                                        {comp.insumo}
+                                      </td>
+                                      <td className="py-1 text-gray-500">{comp.unidad}</td>
                                       <td className="py-1 text-right text-gray-600">{fmt(comp.cantidadTotal, 3)}</td>
-                                      <td className="py-1 text-right text-gray-500">${fmt(comp.precioReferencia)}</td>
                                       <td className="py-1 text-right font-medium text-gray-700">${fmt(comp.costoTotal)}</td>
                                     </tr>
                                   ))}
@@ -355,6 +365,9 @@ export default function PresupuestoPage() {
                   <td className="px-3 py-3 font-bold text-gray-900 text-xs uppercase tracking-wide" colSpan={3}>
                     TOTAL GENERAL
                   </td>
+                  <td></td>
+                  <td></td>
+                  <td></td>
                   <td className="px-3 py-3 text-right font-bold text-blue-600 text-xs">${fmt(data.totalMat)}</td>
                   <td className="px-3 py-3 text-right font-bold text-brand-600 text-xs">${fmt(data.totalMO)}</td>
                   <td className="px-3 py-3 text-right font-bold text-amber-600 text-xs">${fmt(data.totalEQ)}</td>

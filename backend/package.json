@@ -7,7 +7,9 @@
     "start": "prisma migrate deploy && node dist/index.js",
     "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "env:docker": "cp .env.docker .env && echo 'Now using LOCAL DOCKER db'",
+    "env:supabase": "cp .env.supabase .env && echo 'Now using SUPABASE db'"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
