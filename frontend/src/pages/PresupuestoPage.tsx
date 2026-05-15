@@ -1,3 +1,4 @@
+import { apiFetch } from "../lib/api";
 import { useState, useEffect } from "react";
 
 interface Obra {
@@ -98,7 +99,7 @@ export default function PresupuestoPage() {
   const [showPV, setShowPV] = useState(false);
 
   useEffect(() => {
-    fetch("/api/obras")
+    apiFetch("/api/obras")
       .then((r) => r.json())
       .then((list: Obra[]) => {
         setObras(list);
@@ -112,7 +113,7 @@ export default function PresupuestoPage() {
     setLoading(true);
     setData(null);
     setExpanded(new Set());
-    fetch(`/api/obras/${obraId}/presupuesto`)
+    apiFetch(`/api/obras/${obraId}/presupuesto`)
       .then((r) => r.json())
       .then((d) => { setData(d); setLoading(false); })
       .catch(() => setLoading(false));

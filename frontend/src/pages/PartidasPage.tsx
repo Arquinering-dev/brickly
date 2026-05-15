@@ -1,3 +1,4 @@
+import { apiFetch } from "../lib/api";
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Paginador } from "../components/Paginador";
@@ -39,7 +40,7 @@ export default function PartidasPage() {
     if (rubro) params.set("rubro", rubro);
     if (tipo) params.set("tipo", tipo);
     params.set("activa", "true");
-    const res = await fetch(`/api/partidas?${params}`);
+    const res = await apiFetch(`/api/partidas?${params}`);
     const data: Partida[] = await res.json();
     setPartidas(data);
     const uniqueRubros = [...new Set(data.map((p) => p.rubro))].filter(Boolean).sort();
@@ -55,7 +56,7 @@ export default function PartidasPage() {
   useEffect(() => { setPage(1); }, [search, rubro, tipo]);
 
   const desactivar = async (id: string) => {
-    await fetch(`/api/partidas/${id}`, { method: "DELETE" });
+    await apiFetch(`/api/partidas/${id}`, { method: "DELETE" });
     fetchPartidas();
   };
 

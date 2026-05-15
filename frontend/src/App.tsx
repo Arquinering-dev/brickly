@@ -1,4 +1,6 @@
 import { BrowserRouter, Routes, Route, NavLink, Navigate } from "react-router-dom";
+import { AuthProvider, useAuth } from "./context/AuthContext";
+import LoginPage from "./pages/LoginPage";
 import ImportPage from "./pages/ImportPage";
 import PartidasPage from "./pages/PartidasPage";
 import PartidaDetailPage from "./pages/PartidaDetailPage";
@@ -17,6 +19,8 @@ function ArquineringLogo({ size = 40 }: { size?: number }) {
 }
 
 function Sidebar() {
+  const { usuario, logout } = useAuth();
+
   const linkClass = ({ isActive }: { isActive: boolean }) =>
     `flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
       isActive ? "bg-brand-500 text-white shadow-sm" : "text-gray-600 hover:bg-brand-50 hover:text-brand-700"
@@ -89,31 +93,71 @@ function Sidebar() {
         </NavLink>
       </nav>
 
-      <div className="px-4 py-3 border-t border-gray-100 flex items-center gap-2">
-        <ArquineringLogo size={20} />
-        <span className="text-[11px] text-gray-400">Arquinering S.R.L.</span>
+      <div className="px-4 py-3 border-t border-gray-100">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 min-w-0">
+            <ArquineringLogo size={20} />
+            <span className="text-[11px] text-gray-500 truncate">
+              {usuario?.nombre ?? usuario?.email ?? ""}
+            </span>
+          </div>
+          <button
+            onClick={logout}
+            title="Cerrar sesión"
+            className="text-gray-400 hover:text-gray-600 transition-colors ml-2 shrink-0"
+          >
+            <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 001 1h7a1 1 0 100-2H4V5h6a1 1 0 100-2H3zm11.707 4.293a1 1 0 010 1.414L13.414 10l1.293 1.293a1 1 0 01-1.414 1.414l-2-2a1 1 0 010-1.414l2-2a1 1 0 011.414 0z" clipRule="evenodd" />
+              <path d="M13 10a1 1 0 011-1h3a1 1 0 110 2h-3a1 1 0 01-1-1z" />
+            </svg>
+          </button>
+        </div>
       </div>
     </aside>
   );
 }
 
+function RequireAuth({ children }: { children: React.ReactNode }) {
+  const { token } = useAuth();
+  if (!token) return <Navigate to="/login" replace />;
+  return <>{children}</>;
+}
+
+function Layout() {
+  return (
+    <div className="flex min-h-screen bg-gray-50">
+      <Sidebar />
+      <main className="flex-1 overflow-auto">
+        <Routes>
+          <Route path="/" element={<Navigate to="/import" replace />} />
+          <Route path="/import" element={<ImportPage />} />
+          <Route path="/partidas" element={<PartidasPage />} />
+          <Route path="/partidas/:id" element={<PartidaDetailPage />} />
+          <Route path="/catalogos" element={<CatalogosPage />} />
+          <Route path="/presupuesto" element={<PresupuestoPage />} />
+          <Route path="/planificacion" element={<PlanificacionPage />} />
+        </Routes>
+      </main>
+    </div>
+  );
+}
+
 export default function App() {
   return (
-    <BrowserRouter>
-      <div className="flex min-h-screen bg-gray-50">
-        <Sidebar />
-        <main className="flex-1 overflow-auto">
-          <Routes>
-            <Route path="/" element={<Navigate to="/import" replace />} />
-            <Route path="/import" element={<ImportPage />} />
-            <Route path="/partidas" element={<PartidasPage />} />
-            <Route path="/partidas/:id" element={<PartidaDetailPage />} />
-            <Route path="/catalogos" element={<CatalogosPage />} />
-            <Route path="/presupuesto" element={<PresupuestoPage />} />
-            <Route path="/planificacion" element={<PlanificacionPage />} />
-          </Routes>
-        </main>
-      </div>
-    </BrowserRouter>
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route
+            path="/*"
+            element={
+              <RequireAuth>
+                <Layout />
+              </RequireAuth>
+            }
+          />
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
   );
 }

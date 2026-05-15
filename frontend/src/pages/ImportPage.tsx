@@ -1,3 +1,4 @@
+import { apiFetch } from "../lib/api";
 import { useState, useRef, useEffect, DragEvent, ChangeEvent } from "react";
 
 interface Obra {
@@ -98,7 +99,7 @@ function UnifiedCard() {
     const form = new FormData();
     form.append("file", file);
     try {
-      const res = await fetch("/api/import/unificado", { method: "POST", body: form });
+      const res = await apiFetch("/api/import/unificado", { method: "POST", body: form });
       if (res.ok) {
         const data = await res.json();
         setSummary(data.summary);
@@ -214,7 +215,7 @@ function APUCard() {
     const form = new FormData();
     form.append("file", file);
     try {
-      const res = await fetch("/api/import/apu", { method: "POST", body: form });
+      const res = await apiFetch("/api/import/apu", { method: "POST", body: form });
       if (res.ok) {
         const data = await res.json();
         setSummary(data.summary);
@@ -321,7 +322,7 @@ function PresupuestoCard() {
   const [errors, setErrors] = useState<string[]>([]);
 
   useEffect(() => {
-    fetch("/api/obras")
+    apiFetch("/api/obras")
       .then((r) => r.json())
       .then((data) => { setObras(data); if (data.length > 0) setObraId(data[0].id); })
       .catch(() => {});
@@ -329,7 +330,7 @@ function PresupuestoCard() {
 
   const crearObra = async () => {
     if (!nuevaObra.nombre || !nuevaObra.codigo) return;
-    const res = await fetch("/api/obras", {
+    const res = await apiFetch("/api/obras", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(nuevaObra),
@@ -354,7 +355,7 @@ function PresupuestoCard() {
     form.append("cacValor", cacValor);
     form.append("mesCac", mesCac);
     try {
-      const res = await fetch("/api/import/presupuesto", { method: "POST", body: form });
+      const res = await apiFetch("/api/import/presupuesto", { method: "POST", body: form });
       if (res.ok) {
         const data = await res.json();
         setSummary(data.summary);

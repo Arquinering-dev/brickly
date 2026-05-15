@@ -8,6 +8,16 @@ datasource db {
   directUrl = env("DIRECT_DATABASE_URL")
 }
 
+model Usuario {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  nombre    String?
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 enum TipoInsumo {
   MATERIAL
   MANO_DE_OBRA

@@ -1,3 +1,4 @@
+import { apiFetch } from "../lib/api";
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 
@@ -61,7 +62,7 @@ function AddInsumoModal({
   useEffect(() => {
     const params = new URLSearchParams({ tipo });
     if (search) params.set("search", search);
-    fetch(`/api/insumos?${params}`)
+    apiFetch(`/api/insumos?${params}`)
       .then((r) => r.json())
       .then(setInsumos)
       .catch(() => {});
@@ -287,7 +288,7 @@ export default function PartidaDetailPage() {
 
   const fetchPartida = async () => {
     setLoading(true);
-    const res = await fetch(`/api/partidas/${id}`);
+    const res = await apiFetch(`/api/partidas/${id}`);
     const data: Partida = await res.json();
     setPartida(data);
     setForm({ descripcion: data.descripcion, rubro: data.rubro, unidad: data.unidad, rendimiento: data.rendimiento, tipo: data.tipo });
@@ -299,7 +300,7 @@ export default function PartidaDetailPage() {
   const savePartida = async () => {
     if (!partida) return;
     setSaving(true);
-    await fetch(`/api/partidas/${id}`, {
+    await apiFetch(`/api/partidas/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(form),
@@ -309,7 +310,7 @@ export default function PartidaDetailPage() {
   };
 
   const updateComposicion = async (compId: string, cant: number, pct: number) => {
-    await fetch(`/api/partidas/${id}/composicion/${compId}`, {
+    await apiFetch(`/api/partidas/${id}/composicion/${compId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ cantidadPorUnidad: cant, pctDesperdicio: pct }),
@@ -318,12 +319,12 @@ export default function PartidaDetailPage() {
   };
 
   const deleteComposicion = async (compId: string) => {
-    await fetch(`/api/partidas/${id}/composicion/${compId}`, { method: "DELETE" });
+    await apiFetch(`/api/partidas/${id}/composicion/${compId}`, { method: "DELETE" });
     fetchPartida();
   };
 
   const addInsumo = async (insumoId: string, cantidadPorUnidad: number, pctDesperdicio: number) => {
-    await fetch(`/api/partidas/${id}/composicion`, {
+    await apiFetch(`/api/partidas/${id}/composicion`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ insumoId, cantidadPorUnidad, pctDesperdicio }),

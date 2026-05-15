@@ -1,3 +1,4 @@
+import { apiFetch } from "../lib/api";
 import { useState, useEffect } from "react";
 import { Paginador } from "../components/Paginador";
 
@@ -246,7 +247,7 @@ export default function PlanificacionPage() {
   const [search, setSearch] = useState("");
 
   useEffect(() => {
-    fetch("/api/obras")
+    apiFetch("/api/obras")
       .then((r) => r.json())
       .then((list: Obra[]) => {
         setObras(list);
@@ -259,7 +260,7 @@ export default function PlanificacionPage() {
     if (!obraId) return;
     setData(null);
     setRubro("");
-    fetch(`/api/obras/${obraId}/planificacion`)
+    apiFetch(`/api/obras/${obraId}/planificacion`)
       .then((r) => r.json())
       .then((d) => {
         setRubros(d.rubros ?? []);
@@ -274,7 +275,7 @@ export default function PlanificacionPage() {
     const params = new URLSearchParams({ pct: "1" });
     if (rubro === "__ALL__") params.set("all", "1");
     else params.set("rubro", rubro);
-    fetch(`/api/obras/${obraId}/planificacion?${params}`)
+    apiFetch(`/api/obras/${obraId}/planificacion?${params}`)
       .then((r) => r.json())
       .then((d) => {
         setData(d);

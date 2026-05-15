@@ -1,3 +1,4 @@
+import { apiFetch } from "../lib/api";
 import { useState, useEffect } from "react";
 import { Paginador } from "../components/Paginador";
 
@@ -43,7 +44,7 @@ export default function CatalogosPage() {
     setLoading(true);
     const params = new URLSearchParams({ tipo: tab });
     if (search) params.set("search", search);
-    fetch(`/api/insumos?${params}`)
+    apiFetch(`/api/insumos?${params}`)
       .then((r) => r.json())
       .then((data: Insumo[]) => {
         setInsumos(data);
