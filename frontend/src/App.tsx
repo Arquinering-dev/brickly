@@ -1,5 +1,7 @@
 import { BrowserRouter, Routes, Route, NavLink, Navigate } from "react-router-dom";
+import { useState, useEffect } from "react";
 import { AuthProvider, useAuth } from "./context/AuthContext";
+import { apiFetch } from "./lib/api";
 import LoginPage from "./pages/LoginPage";
 import ImportPage from "./pages/ImportPage";
 import PartidasPage from "./pages/PartidasPage";
@@ -7,6 +9,22 @@ import PartidaDetailPage from "./pages/PartidaDetailPage";
 import CatalogosPage from "./pages/CatalogosPage";
 import PresupuestoPage from "./pages/PresupuestoPage";
 import PlanificacionPage from "./pages/PlanificacionPage";
+
+type HealthStatus = "checking" | "ok" | "error";
+
+function useHealthCheck() {
+  const [status, setStatus] = useState<HealthStatus>("checking");
+  useEffect(() => {
+    const check = () =>
+      apiFetch("/api/health")
+        .then((r) => setStatus(r.ok ? "ok" : "error"))
+        .catch(() => setStatus("error"));
+    check();
+    const id = setInterval(check, 30_000);
+    return () => clearInterval(id);
+  }, []);
+  return status;
+}
 
 function ArquineringLogo({ size = 40 }: { size?: number }) {
   return (
@@ -20,6 +38,7 @@ function ArquineringLogo({ size = 40 }: { size?: number }) {
 
 function Sidebar() {
   const { usuario, logout } = useAuth();
+  const health = useHealthCheck();
 
   const linkClass = ({ isActive }: { isActive: boolean }) =>
     `flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
@@ -93,7 +112,17 @@ function Sidebar() {
         </NavLink>
       </nav>
 
-      <div className="px-4 py-3 border-t border-gray-100">
+      <div className="px-4 py-3 border-t border-gray-100 space-y-2">
+        <div className="flex items-center gap-1.5">
+          <span
+            className={`w-2 h-2 rounded-full shrink-0 ${
+              health === "ok" ? "bg-green-400" : health === "error" ? "bg-red-400" : "bg-gray-300 animate-pulse"
+            }`}
+          />
+          <span className="text-[10px] text-gray-400">
+            {health === "ok" ? "API conectada" : health === "error" ? "Sin conexión" : "Verificando…"}
+          </span>
+        </div>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 min-w-0">
             <ArquineringLogo size={20} />

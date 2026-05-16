@@ -171,11 +171,17 @@ export async function importUnified(buffer: Buffer): Promise<UnifiedImportSummar
   // 4. Upsert Obra
   const { nombre: obraNombre, codigo: obraCodigo } = deriveObraFromTitle(titulo);
 
-  const obra = await prisma.obra.upsert({
-    where: { codigo: obraCodigo },
-    create: { nombre: obraNombre, codigo: obraCodigo, estado: "EN_CURSO" },
-    update: { nombre: obraNombre },
-  });
+  let obra: { id: string };
+  try {
+    obra = await prisma.obra.upsert({
+      where: { codigo: obraCodigo },
+      create: { nombre: obraNombre, codigo: obraCodigo, estado: "EN_CURSO" },
+      update: { nombre: obraNombre },
+    });
+  } catch (err) {
+    errores.push(`Error creando obra: ${err instanceof Error ? err.message : String(err)}`);
+    return { ...apuSummary, lineasPresupuesto: 0, obraId: "", obraNombre, warnings, errores };
+  }
 
   // 5. Invalidate previous presupuestos vigentes
   await prisma.presupuestoHeader.updateMany({
@@ -184,55 +190,60 @@ export async function importUnified(buffer: Buffer): Promise<UnifiedImportSummar
   });
 
   // 6. Create new PresupuestoHeader
-  const header = await prisma.presupuestoHeader.create({
-    data: {
-      obraId: obra.id,
-      fecha: new Date(),
-      cacValor: 0,
-      mesCac: mesCac,
-      nombre: titulo,
-      version: parseConfig(wb).version || undefined,
-      coefGGBB,
-    },
-  });
+  let header: { id: string };
+  try {
+    header = await prisma.presupuestoHeader.create({
+      data: {
+        obraId: obra.id,
+        fecha: new Date(),
+        cacValor: 0,
+        mesCac: mesCac,
+        nombre: titulo,
+        version: parseConfig(wb).version || undefined,
+        coefGGBB,
+      },
+    });
+  } catch (err) {
+    errores.push(`Error creando presupuesto: ${err instanceof Error ? err.message : String(err)}`);
+    return { ...apuSummary, lineasPresupuesto: 0, obraId: obra.id, obraNombre, warnings, errores };
+  }
 
   // 7. Load partida map for linking
   const allPartidas = await prisma.partida.findMany({ select: { id: true, codigo: true } });
   const partidaByCode = new Map(allPartidas.map((p) => [p.codigo.toUpperCase(), p.id]));
 
-  // 8. Create LineaPresupuesto rows
-  let lineasCount = 0;
-  for (const linea of lineas) {
+  // 8. Batch create LineaPresupuesto rows
+  const lineasData = lineas.map((linea) => {
     const partidaId = linea.apuLinkCodigo
       ? (partidaByCode.get(linea.apuLinkCodigo.toUpperCase()) ?? null)
       : null;
+    return {
+      obraId: obra.id,
+      presupuestoHeaderId: header.id,
+      partidaId,
+      descripcionLibre: partidaId ? null : linea.descripcion,
+      cantidad: linea.cantidad,
+      precioUnitarioSnapshot: linea.cdUd,
+      tipo: "APU" as const,
+      estadoItem: "OK",
+      rubro: linea.rubro || "GENERAL",
+      itemNumero: linea.itemNumero,
+      orden: linea.orden,
+      matUd: linea.matUd > 0 ? linea.matUd : null,
+      moUd: linea.moUd > 0 ? linea.moUd : null,
+      eqUd: linea.eqUd > 0 ? linea.eqUd : null,
+      precioVenta: linea.precioVenta,
+      fuente: linea.fuente,
+      apuLinkCodigo: linea.apuLinkCodigo,
+    };
+  });
 
-    try {
-      await prisma.lineaPresupuesto.create({
-        data: {
-          obraId: obra.id,
-          presupuestoHeaderId: header.id,
-          partidaId,
-          descripcionLibre: partidaId ? null : linea.descripcion,
-          cantidad: linea.cantidad,
-          precioUnitarioSnapshot: linea.cdUd,
-          tipo: "APU",
-          estadoItem: "OK",
-          rubro: linea.rubro || "GENERAL",
-          itemNumero: linea.itemNumero,
-          orden: linea.orden,
-          matUd: linea.matUd > 0 ? linea.matUd : null,
-          moUd: linea.moUd > 0 ? linea.moUd : null,
-          eqUd: linea.eqUd > 0 ? linea.eqUd : null,
-          precioVenta: linea.precioVenta,
-          fuente: linea.fuente,
-          apuLinkCodigo: linea.apuLinkCodigo,
-        },
-      });
-      lineasCount++;
-    } catch (err) {
-      errores.push(`Línea ${linea.itemNumero}: ${err instanceof Error ? err.message : "error"}`);
-    }
+  let lineasCount = 0;
+  try {
+    const result = await prisma.lineaPresupuesto.createMany({ data: lineasData });
+    lineasCount = result.count;
+  } catch (err) {
+    errores.push(`Error creando líneas de presupuesto: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   return {

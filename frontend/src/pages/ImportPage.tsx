@@ -12,6 +12,7 @@ interface UnifiedSummary {
   partidas: number;
   composiciones: number;
   lineasPresupuesto: number;
+  obraId: string;
   obraNombre: string;
   warnings: string[];
   errores: string[];
@@ -85,11 +86,27 @@ function Dropzone({
   );
 }
 
+const IMPORT_PHASES = [
+  "Analizando el archivo Excel…",
+  "Guardando insumos y partidas…",
+  "Guardando composiciones APU…",
+  "Creando obra y presupuesto…",
+];
+
 function UnifiedCard() {
   const [status, setStatus] = useState<UploadStatus>("idle");
   const [file, setFile] = useState<File | null>(null);
   const [summary, setSummary] = useState<UnifiedSummary | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
+  const [phaseIndex, setPhaseIndex] = useState(0);
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    if (status !== "uploading") { setPhaseIndex(0); setElapsed(0); return; }
+    const phaseTimer = setInterval(() => setPhaseIndex((i) => (i + 1) % IMPORT_PHASES.length), 4000);
+    const elapsedTimer = setInterval(() => setElapsed((s) => s + 1), 1000);
+    return () => { clearInterval(phaseTimer); clearInterval(elapsedTimer); };
+  }, [status]);
 
   const upload = async () => {
     if (!file) return;
@@ -135,7 +152,7 @@ function UnifiedCard() {
         <Dropzone file={file} onFile={setFile} label="Arrastrá el APU unificado acá (ej: APU_Unificado_GDR3760.xlsx)" />
       </div>
 
-      <div className="mt-4 flex gap-2">
+      <div className="mt-4 flex gap-2 items-center">
         <button
           onClick={upload}
           disabled={!file || status === "uploading"}
@@ -150,11 +167,30 @@ function UnifiedCard() {
         )}
       </div>
 
+      {status === "uploading" && (
+        <div className="mt-3 flex items-center gap-2 text-xs text-brand-600">
+          <svg className="animate-spin w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+          </svg>
+          <span>{IMPORT_PHASES[phaseIndex]}</span>
+          <span className="text-gray-400 ml-auto">{elapsed}s</span>
+        </div>
+      )}
+
       {status === "success" && summary && (
         <div className="mt-4">
           <p className="text-green-700 font-medium text-sm mb-2">
-            Importado — obra: <span className="font-bold">{summary.obraNombre}</span>
+            Importado — obra: <span className="font-bold">{summary.obraNombre || "—"}</span>
           </p>
+          {(!summary.obraId || summary.lineasPresupuesto === 0) && (
+            <div className="mb-3 bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+              <p className="text-xs font-medium text-yellow-800">
+                El APU se importó pero no se generó el presupuesto.
+                Revisá que la hoja PPTO_GENERADOR tenga datos válidos.
+              </p>
+            </div>
+          )}
           <div className="grid grid-cols-4 gap-2">
             {[
               { label: "Insumos", value: summary.insumos },

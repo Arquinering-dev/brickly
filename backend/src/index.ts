@@ -6,6 +6,7 @@ import insumosRoutes from "./routes/insumos.routes";
 import obrasRoutes from "./routes/obras.routes";
 import authRoutes from "./routes/auth.routes";
 import { requireAuth } from "./middleware/auth.middleware";
+import prisma from "./prisma/client";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -27,7 +28,15 @@ app.use(
 );
 app.use(express.json());
 
-app.get("/api/health", (_req, res) => res.json({ ok: true }));
+app.get("/api/health", async (_req, res) => {
+  const t0 = Date.now();
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({ status: "ok", db: "connected", latencyMs: Date.now() - t0 });
+  } catch (err) {
+    res.status(503).json({ status: "error", db: "unreachable", latencyMs: Date.now() - t0, error: String(err) });
+  }
+});
 app.use("/api/auth", authRoutes);
 
 app.use("/api/import", requireAuth, importRoutes);

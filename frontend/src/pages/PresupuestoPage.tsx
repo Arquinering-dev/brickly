@@ -94,29 +94,37 @@ export default function PresupuestoPage() {
   const [obraId, setObraId] = useState("");
   const [data, setData] = useState<PresupuestoData | null>(null);
   const [loading, setLoading] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [expandedLinea, setExpandedLinea] = useState<Set<string>>(new Set());
   const [showPV, setShowPV] = useState(false);
 
   useEffect(() => {
     apiFetch("/api/obras")
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(`Error ${r.status} cargando obras`);
+        return r.json();
+      })
       .then((list: Obra[]) => {
         setObras(list);
         if (list.length > 0) setObraId(list[0].id);
       })
-      .catch(() => {});
+      .catch((e) => setFetchError(e.message));
   }, []);
 
   useEffect(() => {
     if (!obraId) return;
     setLoading(true);
     setData(null);
+    setFetchError(null);
     setExpanded(new Set());
     apiFetch(`/api/obras/${obraId}/presupuesto`)
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(`Error ${r.status} cargando presupuesto`);
+        return r.json();
+      })
       .then((d) => { setData(d); setLoading(false); })
-      .catch(() => setLoading(false));
+      .catch((e) => { setFetchError(e.message); setLoading(false); });
   }, [obraId]);
 
   const toggleRubro = (nombre: string) =>
@@ -208,13 +216,20 @@ export default function PresupuestoPage() {
 
       {loading && <div className="py-12 text-center text-gray-400">Cargando presupuesto…</div>}
 
-      {!loading && data && data.rubros.length === 0 && (
+      {!loading && fetchError && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4">
+          <p className="text-sm font-medium text-red-700">No se pudo cargar el presupuesto</p>
+          <p className="text-xs text-red-500 mt-0.5">{fetchError}</p>
+        </div>
+      )}
+
+      {!loading && !fetchError && data && data.rubros.length === 0 && (
         <div className="py-12 text-center text-gray-400">
           Sin líneas de presupuesto para esta obra. Importá el APU unificado en la sección Importar.
         </div>
       )}
 
-      {!loading && data && data.rubros.length > 0 && (
+      {!loading && !fetchError && data && data.rubros.length > 0 && (
         <>
           <div className="flex justify-end mb-2">
             <button
