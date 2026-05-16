@@ -1,11 +1,7 @@
 import { apiFetch } from "../lib/api";
 import { useState, useEffect } from "react";
-
-interface Obra {
-  id: string;
-  nombre: string;
-  codigo: string;
-}
+import { useObras } from "../hooks/useObras";
+import { getCached, setCached, isStale } from "../lib/cache";
 
 interface ComposicionDetalle {
   insumo: string;
@@ -89,8 +85,37 @@ const TIPO_COMP_CLASS: Record<string, string> = {
   SUBCONTRATO: "text-purple-600",
 };
 
+function SkeletonKPI() {
+  return (
+    <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6 animate-pulse">
+      <div className="bg-gray-100 rounded-xl h-20 lg:col-span-2" />
+      <div className="bg-gray-100 rounded-xl h-20" />
+      <div className="bg-gray-100 rounded-xl h-20" />
+      <div className="bg-gray-100 rounded-xl h-20" />
+    </div>
+  );
+}
+
+function SkeletonTable() {
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden animate-pulse">
+      <div className="bg-gray-50 border-b border-gray-100 h-10" />
+      {Array.from({ length: 6 }).map((_, i) => (
+        <div key={i} className="border-b border-gray-50 px-4 py-3 flex gap-4">
+          <div className="bg-gray-100 rounded h-3 w-8" />
+          <div className="bg-gray-100 rounded h-3 flex-1" />
+          <div className="bg-gray-100 rounded h-3 w-20" />
+          <div className="bg-gray-100 rounded h-3 w-24" />
+          <div className="bg-gray-100 rounded h-3 w-24" />
+          <div className="bg-gray-100 rounded h-3 w-28" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function PresupuestoPage() {
-  const [obras, setObras] = useState<Obra[]>([]);
+  const { obras, obrasLoading } = useObras();
   const [obraId, setObraId] = useState("");
   const [data, setData] = useState<PresupuestoData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -99,32 +124,41 @@ export default function PresupuestoPage() {
   const [expandedLinea, setExpandedLinea] = useState<Set<string>>(new Set());
   const [showPV, setShowPV] = useState(false);
 
+  // Auto-select first obra once loaded
   useEffect(() => {
-    apiFetch("/api/obras")
-      .then((r) => {
-        if (!r.ok) throw new Error(`Error ${r.status} cargando obras`);
-        return r.json();
-      })
-      .then((list: Obra[]) => {
-        setObras(list);
-        if (list.length > 0) setObraId(list[0].id);
-      })
-      .catch((e) => setFetchError(e.message));
-  }, []);
+    if (obras.length > 0 && !obraId) setObraId(obras[0].id);
+  }, [obras, obraId]);
 
   useEffect(() => {
     if (!obraId) return;
-    setLoading(true);
-    setData(null);
-    setFetchError(null);
+
+    const cacheKey = `presupuesto:${obraId}`;
+    const cached = getCached<PresupuestoData>(cacheKey);
+
+    // Show cached data immediately (no blank flash)
+    if (cached) {
+      setData(cached);
+      setFetchError(null);
+    }
+
+    // Skip network if cache is fresh
+    if (!isStale(cacheKey)) return;
+
+    setLoading(!cached); // only show spinner if no cached data to display
     setExpanded(new Set());
+
     apiFetch(`/api/obras/${obraId}/presupuesto`)
       .then((r) => {
-        if (!r.ok) throw new Error(`Error ${r.status} cargando presupuesto`);
+        if (!r.ok) throw new Error(`Error ${r.status}`);
         return r.json();
       })
-      .then((d) => { setData(d); setLoading(false); })
-      .catch((e) => { setFetchError(e.message); setLoading(false); });
+      .then((d: PresupuestoData) => {
+        setCached(cacheKey, d);
+        setData(d);
+        setFetchError(null);
+      })
+      .catch((e) => setFetchError(e.message))
+      .finally(() => setLoading(false));
   }, [obraId]);
 
   const toggleRubro = (nombre: string) =>
@@ -143,19 +177,18 @@ export default function PresupuestoPage() {
 
   const expandAll = () => {
     if (!data) return;
-    if (expanded.size === data.rubros.length) {
-      setExpanded(new Set());
-    } else {
-      setExpanded(new Set(data.rubros.map((r) => r.nombre)));
-    }
+    if (expanded.size === data.rubros.length) setExpanded(new Set());
+    else setExpanded(new Set(data.rubros.map((r) => r.nombre)));
   };
+
+  const isLoadingAnything = obrasLoading || loading;
 
   return (
     <div className="p-8">
       {/* Header */}
       <div className="flex items-start justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Presupuesto Generador</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Presupuesto</h1>
           {data?.presupuesto?.nombre && (
             <p className="text-sm text-gray-500 mt-0.5">{data.presupuesto.nombre}</p>
           )}
@@ -176,18 +209,27 @@ export default function PresupuestoPage() {
               <span className="text-gray-400">(×{data.presupuesto.coefGGBB.toFixed(4)})</span>
             )}
           </label>
-          <select
-            value={obraId}
-            onChange={(e) => setObraId(e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 min-w-[220px]"
-          >
-            {obras.length === 0 && <option value="">Sin obras</option>}
-            {obras.map((o) => (
-              <option key={o.id} value={o.id}>{o.codigo} — {o.nombre}</option>
-            ))}
-          </select>
+
+          {/* Obra select — skeleton while loading, populated instantly from cache */}
+          {obrasLoading ? (
+            <div className="animate-pulse bg-gray-100 rounded-lg h-9 w-56" />
+          ) : (
+            <select
+              value={obraId}
+              onChange={(e) => { setObraId(e.target.value); setData(null); setFetchError(null); }}
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 min-w-[220px]"
+            >
+              {obras.length === 0 && <option value="">Sin obras</option>}
+              {obras.map((o) => (
+                <option key={o.id} value={o.id}>{o.codigo} — {o.nombre}</option>
+              ))}
+            </select>
+          )}
         </div>
       </div>
+
+      {/* KPI skeleton */}
+      {isLoadingAnything && !data && <SkeletonKPI />}
 
       {/* KPI cards */}
       {data && (
@@ -214,7 +256,21 @@ export default function PresupuestoPage() {
         </div>
       )}
 
-      {loading && <div className="py-12 text-center text-gray-400">Cargando presupuesto…</div>}
+      {/* Loading spinner (only when no cached data available) */}
+      {loading && !data && (
+        <SkeletonTable />
+      )}
+
+      {/* Stale data refresh indicator */}
+      {loading && data && (
+        <div className="flex items-center gap-1.5 text-xs text-gray-400 mb-3">
+          <svg className="animate-spin w-3 h-3" viewBox="0 0 24 24" fill="none">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+          </svg>
+          Actualizando…
+        </div>
+      )}
 
       {!loading && fetchError && (
         <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4">
@@ -229,7 +285,7 @@ export default function PresupuestoPage() {
         </div>
       )}
 
-      {!loading && !fetchError && data && data.rubros.length > 0 && (
+      {!fetchError && data && data.rubros.length > 0 && (
         <>
           <div className="flex justify-end mb-2">
             <button
@@ -264,7 +320,6 @@ export default function PresupuestoPage() {
               <tbody>
                 {data.rubros.map((grupo) => (
                   <>
-                    {/* Rubro header */}
                     <tr
                       key={`rubro-${grupo.nombre}`}
                       onClick={() => toggleRubro(grupo.nombre)}

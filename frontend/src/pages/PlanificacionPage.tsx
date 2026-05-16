@@ -1,14 +1,10 @@
 import { apiFetch } from "../lib/api";
 import { useState, useEffect } from "react";
 import { Paginador } from "../components/Paginador";
+import { useObras } from "../hooks/useObras";
+import { getCached, setCached, isStale } from "../lib/cache";
 
 const PER_PAGE_TABLE = 20;
-
-interface Obra {
-  id: string;
-  nombre: string;
-  codigo: string;
-}
 
 interface InsumoAgregado {
   codigo: string;
@@ -237,8 +233,40 @@ function StepBadge({ n, active }: { n: number; active: boolean }) {
   );
 }
 
+function SkeletonPlanificacion() {
+  return (
+    <div className="animate-pulse space-y-4">
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="flex gap-8">
+          <div className="flex-1 space-y-2">
+            <div className="bg-gray-100 rounded h-3 w-16" />
+            <div className="bg-gray-100 rounded h-9 w-full" />
+          </div>
+          <div className="w-px bg-gray-100" />
+          <div className="flex-1 space-y-2">
+            <div className="bg-gray-100 rounded h-3 w-24" />
+            <div className="bg-gray-100 rounded h-9 w-full" />
+          </div>
+        </div>
+      </div>
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="bg-gray-50 border-b border-gray-100 h-10" />
+        {Array.from({ length: 5 }).map((_, i) => (
+          <div key={i} className="border-b border-gray-50 px-4 py-3 flex gap-4">
+            <div className="bg-gray-100 rounded h-3 w-20" />
+            <div className="bg-gray-100 rounded h-3 flex-1" />
+            <div className="bg-gray-100 rounded h-3 w-16" />
+            <div className="bg-gray-100 rounded h-3 w-24" />
+            <div className="bg-gray-100 rounded h-3 w-24" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function PlanificacionPage() {
-  const [obras, setObras] = useState<Obra[]>([]);
+  const { obras, obrasLoading } = useObras();
   const [obraId, setObraId] = useState("");
   const [rubros, setRubros] = useState<string[]>([]);
   const [rubro, setRubro] = useState("");
@@ -246,42 +274,54 @@ export default function PlanificacionPage() {
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
 
+  // Auto-select first obra once loaded
   useEffect(() => {
-    apiFetch("/api/obras")
-      .then((r) => r.json())
-      .then((list: Obra[]) => {
-        setObras(list);
-        if (list.length > 0) setObraId(list[0].id);
-      })
-      .catch(() => {});
-  }, []);
+    if (obras.length > 0 && !obraId) setObraId(obras[0].id);
+  }, [obras, obraId]);
 
   useEffect(() => {
     if (!obraId) return;
     setData(null);
     setRubro("");
+
+    const rubrosCacheKey = `planificacion-rubros:${obraId}`;
+    const cached = getCached<string[]>(rubrosCacheKey);
+    if (cached) setRubros(cached);
+
+    if (!isStale(rubrosCacheKey)) return;
+
     apiFetch(`/api/obras/${obraId}/planificacion`)
       .then((r) => r.json())
       .then((d) => {
-        setRubros(d.rubros ?? []);
+        const list = d.rubros ?? [];
+        setCached(rubrosCacheKey, list);
+        setRubros(list);
       })
       .catch(() => {});
   }, [obraId]);
 
   useEffect(() => {
     if (!obraId || !rubro) return;
-    setLoading(true);
-    setData(null);
+
+    const dataCacheKey = `planificacion-data:${obraId}:${rubro}`;
+    const cached = getCached<PlanificacionData>(dataCacheKey);
+    if (cached) {
+      setData(cached);
+      if (!isStale(dataCacheKey)) return;
+    }
+
+    setLoading(!cached);
     const params = new URLSearchParams({ pct: "1" });
     if (rubro === "__ALL__") params.set("all", "1");
     else params.set("rubro", rubro);
     apiFetch(`/api/obras/${obraId}/planificacion?${params}`)
       .then((r) => r.json())
-      .then((d) => {
+      .then((d: PlanificacionData) => {
+        setCached(dataCacheKey, d);
         setData(d);
-        setLoading(false);
       })
-      .catch(() => setLoading(false));
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, [obraId, rubro]);
 
   const colsMat: Col[] = [
@@ -382,18 +422,22 @@ export default function PlanificacionPage() {
             <StepBadge n={1} active={true} />
             <div className="flex-1">
               <label className="block text-xs font-medium text-gray-600 mb-1.5">Obra</label>
-              <select
-                value={obraId}
-                onChange={(e) => setObraId(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-white"
-              >
-                {obras.length === 0 && <option value="">Sin obras</option>}
-                {obras.map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {o.codigo} — {o.nombre}
-                  </option>
-                ))}
-              </select>
+              {obrasLoading ? (
+                <div className="animate-pulse bg-gray-100 rounded-lg h-9 w-full" />
+              ) : (
+                <select
+                  value={obraId}
+                  onChange={(e) => { setObraId(e.target.value); setRubro(""); setData(null); }}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-white"
+                >
+                  {obras.length === 0 && <option value="">Sin obras</option>}
+                  {obras.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.codigo} — {o.nombre}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
           </div>
 
@@ -486,10 +530,19 @@ export default function PlanificacionPage() {
         </div>
       )}
 
-      {loading && (
-        <div className="py-16 flex flex-col items-center gap-3 text-gray-400 print:hidden">
-          <div className="w-8 h-8 border-2 border-brand-200 border-t-brand-500 rounded-full animate-spin" />
-          <p className="text-sm">Calculando requerimientos…</p>
+      {loading && !data && (
+        <div className="print:hidden">
+          <SkeletonPlanificacion />
+        </div>
+      )}
+
+      {loading && data && (
+        <div className="flex items-center gap-1.5 text-xs text-gray-400 mb-3 print:hidden">
+          <svg className="animate-spin w-3 h-3" viewBox="0 0 24 24" fill="none">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+          </svg>
+          Actualizando…
         </div>
       )}
 
