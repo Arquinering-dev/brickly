@@ -73,17 +73,12 @@ function fmt(n: number, decimals = 0) {
 }
 
 const TIPO_COMP_LABEL: Record<string, string> = {
-  MATERIAL: "MAT",
-  MANO_DE_OBRA: "MO",
-  EQUIPO: "EQ",
-  SUBCONTRATO: "SUB",
+  MATERIAL: "MAT", MANO_DE_OBRA: "MO", EQUIPO: "EQ", SUBCONTRATO: "SUB",
 };
 const TIPO_COMP_CLASS: Record<string, string> = {
-  MATERIAL: "text-blue-600",
-  MANO_DE_OBRA: "text-brand-600",
-  EQUIPO: "text-amber-600",
-  SUBCONTRATO: "text-purple-600",
+  MATERIAL: "text-blue-600", MANO_DE_OBRA: "text-brand-600", EQUIPO: "text-amber-600", SUBCONTRATO: "text-purple-600",
 };
+
 
 function SkeletonKPI() {
   return (
@@ -105,8 +100,6 @@ function SkeletonTable() {
           <div className="bg-gray-100 rounded h-3 w-8" />
           <div className="bg-gray-100 rounded h-3 flex-1" />
           <div className="bg-gray-100 rounded h-3 w-20" />
-          <div className="bg-gray-100 rounded h-3 w-24" />
-          <div className="bg-gray-100 rounded h-3 w-24" />
           <div className="bg-gray-100 rounded h-3 w-28" />
         </div>
       ))}
@@ -123,57 +116,32 @@ export default function PresupuestoPage() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [expandedLinea, setExpandedLinea] = useState<Set<string>>(new Set());
   const [showPV, setShowPV] = useState(false);
+  const [showDesglose, setShowDesglose] = useState(false);
 
-  // Auto-select first obra once loaded
   useEffect(() => {
     if (obras.length > 0 && !obraId) setObraId(obras[0].id);
   }, [obras, obraId]);
 
   useEffect(() => {
     if (!obraId) return;
-
     const cacheKey = `presupuesto:${obraId}`;
     const cached = getCached<PresupuestoData>(cacheKey);
-
-    // Show cached data immediately (no blank flash)
-    if (cached) {
-      setData(cached);
-      setFetchError(null);
-    }
-
-    // Skip network if cache is fresh
+    if (cached) { setData(cached); setFetchError(null); }
     if (!isStale(cacheKey)) return;
-
-    setLoading(!cached); // only show spinner if no cached data to display
+    setLoading(!cached);
     setExpanded(new Set());
-
     apiFetch(`/api/obras/${obraId}/presupuesto`)
-      .then((r) => {
-        if (!r.ok) throw new Error(`Error ${r.status}`);
-        return r.json();
-      })
-      .then((d: PresupuestoData) => {
-        setCached(cacheKey, d);
-        setData(d);
-        setFetchError(null);
-      })
+      .then((r) => { if (!r.ok) throw new Error(`Error ${r.status}`); return r.json(); })
+      .then((d: PresupuestoData) => { setCached(cacheKey, d); setData(d); setFetchError(null); })
       .catch((e) => setFetchError(e.message))
       .finally(() => setLoading(false));
   }, [obraId]);
 
   const toggleRubro = (nombre: string) =>
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      next.has(nombre) ? next.delete(nombre) : next.add(nombre);
-      return next;
-    });
+    setExpanded((prev) => { const s = new Set(prev); s.has(nombre) ? s.delete(nombre) : s.add(nombre); return s; });
 
   const toggleLinea = (id: string) =>
-    setExpandedLinea((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
+    setExpandedLinea((prev) => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
 
   const expandAll = () => {
     if (!data) return;
@@ -181,12 +149,13 @@ export default function PresupuestoPage() {
     else setExpanded(new Set(data.rubros.map((r) => r.nombre)));
   };
 
-  const isLoadingAnything = obrasLoading || loading;
+  // Total column count for colSpan calculations (# | Desc | Ud | Cant | [3 desglose] | CD/ud | Total | [PV])
+  const colCount = 6 + (showDesglose ? 3 : 0) + (showPV ? 1 : 0);
 
   return (
-    <div className="p-8">
+    <div className="p-6 lg:p-8">
       {/* Header */}
-      <div className="flex items-start justify-between mb-6">
+      <div className="flex items-start justify-between mb-5">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Presupuesto</h1>
           {data?.presupuesto?.nombre && (
@@ -196,28 +165,15 @@ export default function PresupuestoPage() {
             <p className="text-xs text-gray-400">{data.presupuesto.version} · Base {data.presupuesto.mesCac}</p>
           )}
         </div>
-        <div className="flex items-center gap-3">
-          <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={showPV}
-              onChange={(e) => setShowPV(e.target.checked)}
-              className="accent-brand-500"
-            />
-            Precio Venta
-            {data?.presupuesto?.coefGGBB && (
-              <span className="text-gray-400">(×{data.presupuesto.coefGGBB.toFixed(4)})</span>
-            )}
-          </label>
-
-          {/* Obra select — skeleton while loading, populated instantly from cache */}
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          {/* Obra selector */}
           {obrasLoading ? (
-            <div className="animate-pulse bg-gray-100 rounded-lg h-9 w-56" />
+            <div className="animate-pulse bg-gray-100 rounded-lg h-9 w-52" />
           ) : (
             <select
               value={obraId}
               onChange={(e) => { setObraId(e.target.value); setData(null); setFetchError(null); }}
-              className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 min-w-[220px]"
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 min-w-[200px]"
             >
               {obras.length === 0 && <option value="">Sin obras</option>}
               {obras.map((o) => (
@@ -229,39 +185,44 @@ export default function PresupuestoPage() {
       </div>
 
       {/* KPI skeleton */}
-      {isLoadingAnything && !data && <SkeletonKPI />}
+      {(obrasLoading || loading) && !data && <SkeletonKPI />}
 
       {/* KPI cards */}
       {data && (
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-          <div className="bg-white border border-gray-200 rounded-xl p-4 lg:col-span-2">
-            <p className="text-xs text-gray-500 mb-0.5">Costo Directo Total</p>
-            <p className="text-xl font-bold text-gray-900">${fmt(data.totalGeneral)}</p>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+          <div className="bg-gray-900 rounded-xl p-4 lg:col-span-1">
+            <p className="text-xs text-gray-400 mb-1">Costo Directo Total</p>
+            <p className="text-2xl font-bold text-white">${fmt(data.totalGeneral)}</p>
           </div>
           <div className="bg-white border border-blue-100 rounded-xl p-4">
-            <p className="text-xs text-blue-500 mb-0.5">Materiales</p>
+            <div className="flex items-center gap-1.5 mb-1">
+              <div className="w-2 h-2 rounded-full bg-blue-400" />
+              <p className="text-xs text-blue-500 font-medium">Materiales</p>
+            </div>
             <p className="text-lg font-bold text-blue-700">${fmt(data.totalMat)}</p>
-            <p className="text-xs text-blue-400">{data.totalGeneral > 0 ? ((data.totalMat / data.totalGeneral) * 100).toFixed(1) : 0}%</p>
+            <p className="text-xs text-blue-400 mt-0.5">{data.totalGeneral > 0 ? ((data.totalMat / data.totalGeneral) * 100).toFixed(1) : 0}%</p>
           </div>
           <div className="bg-white border border-brand-100 rounded-xl p-4">
-            <p className="text-xs text-brand-500 mb-0.5">Mano de Obra</p>
+            <div className="flex items-center gap-1.5 mb-1">
+              <div className="w-2 h-2 rounded-full bg-brand-400" />
+              <p className="text-xs text-brand-500 font-medium">Mano de Obra</p>
+            </div>
             <p className="text-lg font-bold text-brand-700">${fmt(data.totalMO)}</p>
-            <p className="text-xs text-brand-400">{data.totalGeneral > 0 ? ((data.totalMO / data.totalGeneral) * 100).toFixed(1) : 0}%</p>
+            <p className="text-xs text-brand-400 mt-0.5">{data.totalGeneral > 0 ? ((data.totalMO / data.totalGeneral) * 100).toFixed(1) : 0}%</p>
           </div>
           <div className="bg-white border border-amber-100 rounded-xl p-4">
-            <p className="text-xs text-amber-500 mb-0.5">Equipos</p>
+            <div className="flex items-center gap-1.5 mb-1">
+              <div className="w-2 h-2 rounded-full bg-amber-400" />
+              <p className="text-xs text-amber-500 font-medium">Equipos</p>
+            </div>
             <p className="text-lg font-bold text-amber-700">${fmt(data.totalEQ)}</p>
-            <p className="text-xs text-amber-400">{data.totalGeneral > 0 ? ((data.totalEQ / data.totalGeneral) * 100).toFixed(1) : 0}%</p>
+            <p className="text-xs text-amber-400 mt-0.5">{data.totalGeneral > 0 ? ((data.totalEQ / data.totalGeneral) * 100).toFixed(1) : 0}%</p>
           </div>
         </div>
       )}
 
-      {/* Loading spinner (only when no cached data available) */}
-      {loading && !data && (
-        <SkeletonTable />
-      )}
+      {loading && !data && <SkeletonTable />}
 
-      {/* Stale data refresh indicator */}
       {loading && data && (
         <div className="flex items-center gap-1.5 text-xs text-gray-400 mb-3">
           <svg className="animate-spin w-3 h-3" viewBox="0 0 24 24" fill="none">
@@ -287,139 +248,192 @@ export default function PresupuestoPage() {
 
       {!fetchError && data && data.rubros.length > 0 && (
         <>
-          <div className="flex justify-end mb-2">
+          {/* Table controls */}
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowDesglose((v) => !v)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                  showDesglose
+                    ? "bg-gray-900 text-white border-gray-900"
+                    : "text-gray-600 border-gray-300 hover:border-gray-400 bg-white"
+                }`}
+              >
+                <span className="flex gap-0.5">
+                  <span className="w-2 h-2 rounded-sm bg-blue-400 inline-block" />
+                  <span className="w-2 h-2 rounded-sm bg-brand-400 inline-block" />
+                  <span className="w-2 h-2 rounded-sm bg-amber-400 inline-block" />
+                </span>
+                Desglose MAT/MO/EQ
+              </button>
+              <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none px-2">
+                <input
+                  type="checkbox"
+                  checked={showPV}
+                  onChange={(e) => setShowPV(e.target.checked)}
+                  className="accent-brand-500"
+                />
+                Precio Venta
+                {data?.presupuesto?.coefGGBB && (
+                  <span className="text-gray-400">(×{data.presupuesto.coefGGBB.toFixed(4)})</span>
+                )}
+              </label>
+            </div>
             <button
               onClick={expandAll}
-              className="text-xs text-gray-500 hover:text-brand-600 transition-colors"
+              className="text-xs text-gray-400 hover:text-brand-600 transition-colors"
             >
               {expanded.size === data.rubros.length ? "Colapsar todo" : "Expandir todo"}
             </button>
           </div>
 
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <table className="w-full text-sm">
+            <table className="w-full text-xs">
               <thead>
-                <tr className="bg-gray-50 border-b border-gray-100 text-xs">
-                  <th className="text-left px-3 py-3 font-medium text-gray-400 w-12">#</th>
-                  <th className="text-left px-3 py-3 font-medium text-gray-500">Descripción</th>
-                  <th className="text-left px-3 py-3 font-medium text-gray-400 w-12">Ud.</th>
-                  <th className="text-right px-3 py-3 font-medium text-gray-400 w-16">Cant.</th>
-                  <th className="text-right px-3 py-3 font-medium text-blue-400 w-28">MAT/ud</th>
-                  <th className="text-right px-3 py-3 font-medium text-brand-400 w-28">MO/ud</th>
-                  <th className="text-right px-3 py-3 font-medium text-amber-400 w-28">EQ/ud</th>
-                  <th className="text-right px-3 py-3 font-medium text-blue-500 w-32">MAT total</th>
-                  <th className="text-right px-3 py-3 font-medium text-brand-500 w-32">MO total</th>
-                  <th className="text-right px-3 py-3 font-medium text-amber-500 w-32">EQ total</th>
-                  <th className="text-right px-3 py-3 font-medium text-gray-500 w-32">CD/ud</th>
-                  <th className="text-right px-3 py-3 font-medium text-gray-700 w-36">Total CD</th>
-                  {showPV && (
-                    <th className="text-right px-3 py-3 font-medium text-green-600 w-36">Precio Venta</th>
-                  )}
+                <tr className="bg-gray-50 border-b border-gray-200 text-gray-400">
+                  <th className="text-left px-3 py-2.5 font-medium w-14">#</th>
+                  <th className="text-left px-3 py-2.5 font-medium">Descripción</th>
+                  <th className="text-left px-3 py-2.5 font-medium w-10">Ud.</th>
+                  <th className="text-right px-3 py-2.5 font-medium w-14">Cant.</th>
+                  {showDesglose && <>
+                    <th className="text-right px-3 py-2.5 font-medium text-blue-400 w-28">MAT total</th>
+                    <th className="text-right px-3 py-2.5 font-medium text-brand-400 w-28">MO total</th>
+                    <th className="text-right px-3 py-2.5 font-medium text-amber-400 w-28">EQ total</th>
+                  </>}
+                  <th className="text-right px-3 py-2.5 font-medium text-gray-500 w-28">CD/ud</th>
+                  <th className="text-right px-3 py-2.5 font-medium text-gray-800 w-36 border-l border-gray-100">Total CD</th>
+                  {showPV && <th className="text-right px-3 py-2.5 font-medium text-green-600 w-36">P. Venta</th>}
                 </tr>
               </thead>
               <tbody>
                 {data.rubros.map((grupo) => (
                   <>
+                    {/* Rubro header */}
                     <tr
                       key={`rubro-${grupo.nombre}`}
                       onClick={() => toggleRubro(grupo.nombre)}
-                      className="border-b border-gray-100 cursor-pointer hover:bg-brand-50 bg-gray-50"
+                      className="border-b border-gray-100 cursor-pointer hover:bg-brand-50/60 bg-gray-50/80 select-none"
                     >
-                      <td className="px-3 py-3 text-gray-400 text-xs">
+                      <td className="px-3 py-3 text-gray-400 w-14">
                         {expanded.has(grupo.nombre) ? "▼" : "▶"}
                       </td>
-                      <td className="px-3 py-3 font-semibold text-gray-800 uppercase text-xs tracking-wide" colSpan={3}>
-                        {grupo.nombre}
+                      <td className="px-3 py-3" colSpan={showDesglose ? 4 : 3}>
+                        <span className="font-bold text-gray-800 uppercase tracking-wide text-xs">
+                          {grupo.nombre}
+                        </span>
                       </td>
-                      <td></td>
-                      <td></td>
-                      <td></td>
-                      <td className="px-3 py-3 text-right text-xs font-semibold text-blue-600">${fmt(grupo.totalMat)}</td>
-                      <td className="px-3 py-3 text-right text-xs font-semibold text-brand-600">${fmt(grupo.totalMO)}</td>
-                      <td className="px-3 py-3 text-right text-xs font-semibold text-amber-600">${fmt(grupo.totalEQ)}</td>
-                      <td></td>
-                      <td className="px-3 py-3 text-right font-bold text-gray-900">${fmt(grupo.totalRubro)}</td>
-                      {showPV && (
-                        <td className="px-3 py-3 text-right font-bold text-green-700">${fmt(grupo.totalPV)}</td>
-                      )}
+                      {showDesglose && <>
+                        <td className="px-3 py-3 text-right font-semibold text-blue-600">${fmt(grupo.totalMat)}</td>
+                        <td className="px-3 py-3 text-right font-semibold text-brand-600">${fmt(grupo.totalMO)}</td>
+                        <td className="px-3 py-3 text-right font-semibold text-amber-600">${fmt(grupo.totalEQ)}</td>
+                      </>}
+                      <td className="px-3 py-3 text-right text-gray-400" />
+                      <td className="px-3 py-3 text-right font-bold text-gray-900 text-sm border-l border-gray-100">
+                        ${fmt(grupo.totalRubro)}
+                      </td>
+                      {showPV && <td className="px-3 py-3 text-right font-bold text-green-700">${fmt(grupo.totalPV)}</td>}
                     </tr>
 
-                    {expanded.has(grupo.nombre) && grupo.lineas.map((linea) => (
+                    {/* Line items — skip zero-cost entries */}
+                    {expanded.has(grupo.nombre) && grupo.lineas.filter((l) => l.total > 0).map((linea) => (
                       <>
                         <tr
                           key={linea.id}
-                          className={`border-b border-gray-50 ${linea.composicion.length > 0 ? "cursor-pointer hover:bg-gray-50" : "hover:bg-gray-50/50"}`}
                           onClick={() => linea.composicion.length > 0 && toggleLinea(linea.id)}
+                          className={`border-b border-gray-50 transition-colors ${
+                            linea.composicion.length > 0
+                              ? "cursor-pointer hover:bg-blue-50/30"
+                              : "hover:bg-gray-50/50"
+                          }`}
                         >
-                          <td className="px-3 py-2 text-gray-400 text-xs font-mono pl-6">
+                          {/* Item # */}
+                          <td className="px-3 py-2.5 text-gray-400 font-mono pl-5 align-top pt-3">
                             {linea.itemNumero ?? ""}
                           </td>
-                          <td className="px-3 py-2 text-gray-700 text-xs">
-                            <span>{linea.descripcion}</span>
-                            {linea.composicion.length > 0 && (
-                              <span className="ml-1 text-gray-300 text-xs">
-                                {expandedLinea.has(linea.id) ? "▾" : "▸"}
+
+                          {/* Description — single line with tooltip, gets all available width */}
+                          <td className="px-3 py-2.5 align-middle">
+                            <div className="flex items-center gap-1 min-w-0">
+                              <span
+                                className="truncate text-gray-800 font-medium"
+                                title={linea.descripcion}
+                              >
+                                {linea.descripcion}
                               </span>
-                            )}
+                              {linea.composicion.length > 0 && (
+                                <span className="shrink-0 text-gray-300 text-[10px]">
+                                  {expandedLinea.has(linea.id) ? "▾" : "▸"}
+                                </span>
+                              )}
+                            </div>
                           </td>
-                          <td className="px-3 py-2 text-gray-400 text-xs">{linea.unidad}</td>
-                          <td className="px-3 py-2 text-right text-gray-600 text-xs">{fmt(linea.cantidad, 2)}</td>
-                          <td className="px-3 py-2 text-right text-blue-500 text-xs">
-                            {linea.matUd !== null ? `$${fmt(linea.matUd)}` : "—"}
-                          </td>
-                          <td className="px-3 py-2 text-right text-brand-500 text-xs">
-                            {linea.moUd !== null ? `$${fmt(linea.moUd)}` : "—"}
-                          </td>
-                          <td className="px-3 py-2 text-right text-amber-500 text-xs">
-                            {linea.eqUd !== null ? `$${fmt(linea.eqUd)}` : "—"}
-                          </td>
-                          <td className="px-3 py-2 text-right text-blue-600 text-xs">${fmt(linea.matTotal)}</td>
-                          <td className="px-3 py-2 text-right text-brand-600 text-xs">${fmt(linea.moTotal)}</td>
-                          <td className="px-3 py-2 text-right text-amber-600 text-xs">${fmt(linea.eqTotal)}</td>
-                          <td className="px-3 py-2 text-right text-gray-600 text-xs font-medium">
+
+                          {/* Ud + Cant */}
+                          <td className="px-3 py-2.5 text-gray-400 align-middle">{linea.unidad}</td>
+                          <td className="px-3 py-2.5 text-right text-gray-600 align-middle tabular-nums">{fmt(linea.cantidad, 2)}</td>
+
+                          {/* Desglose columns */}
+                          {showDesglose && <>
+                            <td className="px-3 py-2.5 text-right text-blue-500 align-middle tabular-nums">${fmt(linea.matTotal)}</td>
+                            <td className="px-3 py-2.5 text-right text-brand-500 align-middle tabular-nums">${fmt(linea.moTotal)}</td>
+                            <td className="px-3 py-2.5 text-right text-amber-500 align-middle tabular-nums">${fmt(linea.eqTotal)}</td>
+                          </>}
+
+                          {/* CD/ud */}
+                          <td className="px-3 py-2.5 text-right text-gray-500 align-middle tabular-nums">
                             ${fmt(linea.precioUnitario)}
                           </td>
-                          <td className="px-3 py-2 text-right font-semibold text-gray-800 text-xs">
-                            ${fmt(linea.total)}
+
+                          {/* Total CD — hero column */}
+                          <td className="px-3 py-2.5 text-right align-middle border-l border-gray-100">
+                            <span className="font-bold text-gray-900 text-sm tabular-nums">
+                              ${fmt(linea.total)}
+                            </span>
                           </td>
+
                           {showPV && (
-                            <td className="px-3 py-2 text-right text-green-700 text-xs font-medium">
+                            <td className="px-3 py-2.5 text-right text-green-700 font-medium align-middle tabular-nums">
                               {linea.precioVenta !== null ? `$${fmt(linea.precioVenta)}` : "—"}
                             </td>
                           )}
                         </tr>
 
+                        {/* Composition detail */}
                         {expandedLinea.has(linea.id) && linea.composicion.length > 0 && (
-                          <tr key={`comp-${linea.id}`} className="border-b border-gray-50 bg-gray-50/50">
-                            <td colSpan={showPV ? 13 : 12} className="px-3 pb-3 pt-1 pl-14">
+                          <tr key={`comp-${linea.id}`} className="border-b border-gray-50 bg-gray-50/40">
+                            <td colSpan={colCount} className="pl-10 pr-4 pb-3 pt-1">
                               <table className="w-full text-xs">
                                 <thead>
-                                  <tr className="text-gray-400">
-                                    <th className="text-left py-1 font-medium">Tipo</th>
-                                    <th className="text-left py-1 font-medium">Descripción</th>
-                                    <th className="text-left py-1 font-medium">Ud.</th>
-                                    <th className="text-right py-1 font-medium">Cant. requerida</th>
-                                    <th className="text-right py-1 font-medium">Costo total</th>
+                                  <tr className="text-gray-400 border-b border-gray-100">
+                                    <th className="text-left pb-1.5 pt-1 font-medium">Tipo</th>
+                                    <th className="text-left pb-1.5 pt-1 font-medium">Código</th>
+                                    <th className="text-left pb-1.5 pt-1 font-medium">Descripción</th>
+                                    <th className="text-left pb-1.5 pt-1 font-medium">Ud.</th>
+                                    <th className="text-right pb-1.5 pt-1 font-medium">Cant. requerida</th>
+                                    <th className="text-right pb-1.5 pt-1 font-medium">P. ref.</th>
+                                    <th className="text-right pb-1.5 pt-1 font-medium">Costo</th>
                                   </tr>
                                 </thead>
                                 <tbody>
-                                  {[...linea.composicion].sort((a, b) => {
-                                    const order = { MATERIAL: 0, MANO_DE_OBRA: 1, EQUIPO: 2, SUBCONTRATO: 3 } as const;
-                                    return (order[a.tipo] ?? 99) - (order[b.tipo] ?? 99);
-                                  }).map((comp, ci) => (
-                                    <tr key={ci} className="border-t border-gray-100">
-                                      <td className={`py-1 font-medium ${TIPO_COMP_CLASS[comp.tipo] ?? "text-gray-500"}`}>
-                                        {TIPO_COMP_LABEL[comp.tipo] ?? comp.tipo}
-                                      </td>
-                                      <td className="py-1 text-gray-600">
-                                        <span className="font-mono text-gray-400 mr-2">{comp.codigo}</span>
-                                        {comp.insumo}
-                                      </td>
-                                      <td className="py-1 text-gray-500">{comp.unidad}</td>
-                                      <td className="py-1 text-right text-gray-600">{fmt(comp.cantidadTotal, 3)}</td>
-                                      <td className="py-1 text-right font-medium text-gray-700">${fmt(comp.costoTotal)}</td>
-                                    </tr>
-                                  ))}
+                                  {[...linea.composicion]
+                                    .filter((c) => c.cantidadTotal > 0)
+                                    .sort((a, b) => {
+                                      const o = { MATERIAL: 0, MANO_DE_OBRA: 1, EQUIPO: 2, SUBCONTRATO: 3 } as const;
+                                      return (o[a.tipo] ?? 99) - (o[b.tipo] ?? 99);
+                                    })
+                                    .map((comp, ci) => (
+                                      <tr key={ci} className="border-t border-gray-100">
+                                        <td className={`py-1.5 font-semibold ${TIPO_COMP_CLASS[comp.tipo] ?? "text-gray-500"}`}>
+                                          {TIPO_COMP_LABEL[comp.tipo] ?? comp.tipo}
+                                        </td>
+                                        <td className="py-1.5 font-mono text-gray-400 text-[10px] whitespace-nowrap">{comp.codigo}</td>
+                                        <td className="py-1.5 text-gray-700">{comp.insumo}</td>
+                                        <td className="py-1.5 text-gray-400">{comp.unidad}</td>
+                                        <td className="py-1.5 text-right text-gray-600 tabular-nums">{fmt(comp.cantidadTotal, 3)}</td>
+                                        <td className="py-1.5 text-right text-gray-400 tabular-nums">${fmt(comp.precioReferencia)}</td>
+                                        <td className="py-1.5 text-right font-medium text-gray-800 tabular-nums">${fmt(comp.costoTotal)}</td>
+                                      </tr>
+                                    ))}
                                 </tbody>
                               </table>
                             </td>
@@ -432,21 +446,19 @@ export default function PresupuestoPage() {
               </tbody>
               <tfoot>
                 <tr className="border-t-2 border-gray-200 bg-gray-50">
-                  <td></td>
-                  <td className="px-3 py-3 font-bold text-gray-900 text-xs uppercase tracking-wide" colSpan={3}>
-                    TOTAL GENERAL
+                  <td colSpan={showDesglose ? 4 : 4} className="px-3 py-3 font-bold text-gray-700 text-xs uppercase tracking-wide">
+                    Total general
                   </td>
-                  <td></td>
-                  <td></td>
-                  <td></td>
-                  <td className="px-3 py-3 text-right font-bold text-blue-600 text-xs">${fmt(data.totalMat)}</td>
-                  <td className="px-3 py-3 text-right font-bold text-brand-600 text-xs">${fmt(data.totalMO)}</td>
-                  <td className="px-3 py-3 text-right font-bold text-amber-600 text-xs">${fmt(data.totalEQ)}</td>
-                  <td></td>
-                  <td className="px-3 py-3 text-right font-bold text-gray-900 text-base">${fmt(data.totalGeneral)}</td>
-                  {showPV && (
-                    <td className="px-3 py-3 text-right font-bold text-green-700 text-base">${fmt(data.totalPV)}</td>
-                  )}
+                  {showDesglose && <>
+                    <td className="px-3 py-3 text-right font-bold text-blue-600 tabular-nums">${fmt(data.totalMat)}</td>
+                    <td className="px-3 py-3 text-right font-bold text-brand-600 tabular-nums">${fmt(data.totalMO)}</td>
+                    <td className="px-3 py-3 text-right font-bold text-amber-600 tabular-nums">${fmt(data.totalEQ)}</td>
+                  </>}
+                  <td />
+                  <td className="px-3 py-3 text-right font-bold text-gray-900 text-base tabular-nums border-l border-gray-200">
+                    ${fmt(data.totalGeneral)}
+                  </td>
+                  {showPV && <td className="px-3 py-3 text-right font-bold text-green-700 text-base tabular-nums">${fmt(data.totalPV)}</td>}
                 </tr>
               </tfoot>
             </table>

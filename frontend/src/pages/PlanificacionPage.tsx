@@ -300,6 +300,12 @@ export default function PlanificacionPage() {
       .catch(() => {});
   }, [obraId]);
 
+  // Auto-load all etapas when user types a search without selecting one
+  useEffect(() => {
+    if (!obraId || rubro || !search.trim()) return;
+    setRubro("__ALL__");
+  }, [search, obraId, rubro]);
+
   useEffect(() => {
     if (!obraId || !rubro) return;
 
@@ -473,38 +479,42 @@ export default function PlanificacionPage() {
             </div>
           </div>
 
-          {/* Search */}
-          {data && (
-            <>
-              <div className="hidden lg:flex items-center pt-7 text-gray-200">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          {/* Search — always visible; typing without an etapa auto-loads all */}
+          <>
+            <div className="hidden lg:flex items-center pt-7 text-gray-200">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </div>
+            <div className={`flex items-start gap-3 min-w-[180px] flex-1 transition-opacity duration-200 ${!obraId ? "opacity-40 pointer-events-none" : ""}`}>
+              <div className="flex-shrink-0 w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center mt-6">
+                <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                  />
                 </svg>
               </div>
-              <div className="flex items-start gap-3 min-w-[180px] flex-1">
-                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center mt-6">
-                  <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                    />
-                  </svg>
-                </div>
-                <div className="flex-1">
-                  <label className="block text-xs font-medium text-gray-600 mb-1.5">Buscar insumo</label>
-                  <input
-                    type="text"
-                    placeholder="descripción o código…"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
-                  />
-                </div>
+              <div className="flex-1">
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                  Buscar insumo
+                  {!rubro && obraId && (
+                    <span className="ml-1 text-gray-400 font-normal">(busca en toda la obra)</span>
+                  )}
+                </label>
+                <input
+                  type="text"
+                  placeholder="descripción o código…"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  disabled={!obraId}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 disabled:bg-gray-50 disabled:cursor-not-allowed"
+                />
               </div>
-            </>
-          )}
+            </div>
+          </>
         </div>
       </div>
 
@@ -522,10 +532,10 @@ export default function PlanificacionPage() {
             </svg>
           </div>
           <p className="text-base font-medium text-gray-500 mb-1">
-            {!obraId ? "Seleccioná una obra para comenzar" : "Seleccioná una etapa para ver los requerimientos"}
+            {!obraId ? "Seleccioná una obra para comenzar" : "Seleccioná una etapa o buscá un insumo"}
           </p>
           <p className="text-sm text-gray-400">
-            Materiales, mano de obra y equipos consolidados, listos para pedir
+            Podés buscar un material directamente, o filtrar por etapa primero
           </p>
         </div>
       )}
