@@ -22,7 +22,7 @@ export interface PartidaRow {
 
 export interface ComposicionRow {
   partidaCodigo: string;
-  tipo: "MATERIAL" | "MANO_DE_OBRA" | "EQUIPO";
+  tipo: "MATERIAL" | "MANO_DE_OBRA" | "EQUIPO" | "SUBCONTRATO";
   insumoCodigo: string;
   cantidadPorUnidad: number;
   pctDesperdicio: number;
@@ -112,14 +112,18 @@ function parseMateriales(sheet: XLSX.WorkSheet, errors: ParseError[]): InsumoRow
 function parseManoDeObra(sheet: XLSX.WorkSheet, errors: ParseError[]): InsumoRow[] {
   const rows = sheetToRows(sheet);
   const result: InsumoRow[] = [];
-  rows.forEach((row, i) => {
+  rows.forEach((_row, i) => {
+    const row = _row;
     const codigo = safeStr(getField(row, ["código", "codigo"], 0));
     if (!codigo) return;
+    // MO sheets typically have no "unidad" column — salary is always per jornal.
+    // Do NOT fall back to col 2 (that's the price column).
+    const unidadExplicita = safeStr(getField(row, ["unidad", "ud"], -1));
     result.push({
       codigo,
       descripcion: safeStr(getField(row, ["descripción", "descripcion"], 1)),
       tipo: "MANO_DE_OBRA",
-      unidad: safeStr(getField(row, ["unidad", "ud"], 2)) || "día",
+      unidad: unidadExplicita || "jornal",
       precioReferencia: safeNum(getField(row, ["salario", "sueldo", "jornal", "costo", "precio"], 2)),
     });
   });
@@ -129,14 +133,18 @@ function parseManoDeObra(sheet: XLSX.WorkSheet, errors: ParseError[]): InsumoRow
 function parseEquipos(sheet: XLSX.WorkSheet, errors: ParseError[]): InsumoRow[] {
   const rows = sheetToRows(sheet);
   const result: InsumoRow[] = [];
-  rows.forEach((row, i) => {
+  rows.forEach((_row, i) => {
+    const row = _row;
     const codigo = safeStr(getField(row, ["código", "codigo"], 0));
     if (!codigo) return;
+    // EQ sheets have no consistent "unidad" column — col 2 is often a quantity or empty.
+    // Do NOT fall back to col 2; default to "día" (equipment is always per day).
+    const unidadExplicita = safeStr(getField(row, ["unidad", "ud"], -1));
     result.push({
       codigo,
       descripcion: safeStr(getField(row, ["descripción", "descripcion"], 1)),
       tipo: "EQUIPO",
-      unidad: safeStr(getField(row, ["unidad", "ud"], 2)) || "día",
+      unidad: unidadExplicita || "día",
       precioReferencia: safeNum(
         getField(row, ["precio/día", "precio/dia", "preciodia", "precio dia", "precio por dia", "precio"], 5) ??
         getField(row, ["costo/día", "costo/dia", "costodia", "costo dia"], 5) ??
@@ -237,11 +245,13 @@ function parseComposicion(sheet: XLSX.WorkSheet, errors: ParseError[]): Composic
     if (!partidaCodigo) return;
 
     const tipoRaw = safeStr(getField(row, ["tipo"], 1)).toUpperCase();
-    let tipo: "MATERIAL" | "MANO_DE_OBRA" | "EQUIPO" = "MATERIAL";
+    let tipo: "MATERIAL" | "MANO_DE_OBRA" | "EQUIPO" | "SUBCONTRATO" = "MATERIAL";
     if (tipoRaw.includes("MANO") || tipoRaw === "MO" || tipoRaw === "MANO_DE_OBRA") {
       tipo = "MANO_DE_OBRA";
     } else if (tipoRaw.includes("EQUIPO") || tipoRaw === "EQ") {
       tipo = "EQUIPO";
+    } else if (tipoRaw.includes("SUB") || tipoRaw === "SUBCONTRATO") {
+      tipo = "SUBCONTRATO";
     }
 
     const insumoCodigo = safeStr(getField(row, ["insumo", "código insumo", "cod insumo", "codInsumo"], 2));
