@@ -12,6 +12,8 @@ router.get("/", async (req: Request, res: Response) => {
   try {
     const rubro = qstr(req.query.rubro);
     const tipo = qstr(req.query.tipo) as "APU" | "SUBCONTRATO" | "COTIZACION_DIRECTA" | undefined;
+    const scope = qstr(req.query.scope) as "APU" | "OBRA" | undefined;
+    const obraId = qstr(req.query.obraId);
     const search = qstr(req.query.search);
     const activa = req.query.activa !== undefined ? req.query.activa !== "false" : undefined;
 
@@ -19,6 +21,8 @@ router.get("/", async (req: Request, res: Response) => {
       where: {
         ...(rubro ? { rubro } : {}),
         ...(tipo ? { tipo } : {}),
+        ...(scope ? { scope } : {}),
+        ...(obraId ? { obraId } : {}),
         ...(activa !== undefined ? { activa } : {}),
         ...(search
           ? {
@@ -29,7 +33,10 @@ router.get("/", async (req: Request, res: Response) => {
             }
           : {}),
       },
-      include: { _count: { select: { composiciones: true } } },
+      include: {
+        _count: { select: { composiciones: true } },
+        obra: { select: { id: true, nombre: true, codigo: true } },
+      },
       orderBy: [{ rubro: "asc" }, { codigo: "asc" }],
     });
     res.json(partidas);
@@ -61,24 +68,45 @@ router.get("/:id", async (req: Request, res: Response) => {
 
 router.post("/", async (req: Request, res: Response) => {
   try {
-    const { codigo, descripcion, rubro, unidad, rendimiento, tipo } = req.body;
-    if (!codigo || !descripcion) {
-      res.status(400).json({ error: "codigo y descripcion son requeridos" });
+    const { codigo, descripcion, rubro, unidad, rendimiento, tipo, scope, obraId } = req.body;
+    if (!descripcion) {
+      res.status(400).json({ error: "descripcion es requerido" });
       return;
+    }
+    // Autogenerar código si no se provee
+    let finalCodigo = codigo;
+    if (!finalCodigo) {
+      const prefix = scope === "OBRA" ? "PO-" : "P-";
+      finalCodigo = `${prefix}${Date.now().toString(36).toUpperCase()}`;
     }
     const partida = await prisma.partida.create({
       data: {
-        codigo,
+        codigo: finalCodigo,
         descripcion,
-        rubro: rubro ?? "",
-        unidad: unidad ?? "",
+        rubro: rubro ?? "GENERAL",
+        unidad: unidad ?? "u",
         rendimiento: rendimiento ?? null,
         tipo: tipo ?? "APU",
+        scope: scope ?? "APU",
+        obraId: scope === "OBRA" ? obraId ?? null : null,
       },
     });
     res.status(201).json(partida);
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : "Error interno" });
+  }
+});
+
+// Promover una partida de OBRA a APU
+router.post("/:id/promote", async (req: Request, res: Response) => {
+  try {
+    const partida = await prisma.partida.update({
+      where: { id: req.params.id },
+      data: { scope: "APU", obraId: null },
+    });
+    res.json(partida);
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Error al promover partida" });
   }
 });
 

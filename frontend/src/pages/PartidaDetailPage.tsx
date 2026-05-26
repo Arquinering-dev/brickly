@@ -28,6 +28,8 @@ interface Partida {
   unidad: string;
   rendimiento: number | null;
   tipo: "APU" | "SUBCONTRATO" | "COTIZACION_DIRECTA";
+  scope: "APU" | "OBRA";
+  obraId?: string | null;
   activa: boolean;
   composiciones: Composicion[];
 }
@@ -362,14 +364,36 @@ export default function PartidaDetailPage() {
     </div>
   );
 
+  const promover = async () => {
+    if (!confirm("Promover esta partida al catálogo APU global. ¿Continuar?")) return;
+    await apiFetch(`/api/partidas/${id}/promote`, { method: "POST" });
+    fetchPartida();
+  };
+
   return (
     <div className="p-8 max-w-5xl">
-      <div className="flex items-center gap-3 mb-6">
-        <button onClick={() => navigate("/partidas")} className="text-gray-400 hover:text-gray-700 text-sm">
-          ← Partidas
-        </button>
-        <span className="text-gray-300">/</span>
-        <h1 className="text-xl font-bold text-gray-900">{partida.codigo} — {partida.descripcion}</h1>
+      <div className="flex items-center justify-between mb-6 gap-4">
+        <div className="flex items-center gap-3">
+          <button onClick={() => navigate("/partidas")} className="text-gray-400 hover:text-gray-700 text-sm">
+            ← Partidas
+          </button>
+          <span className="text-gray-300">/</span>
+          <h1 className="text-xl font-bold text-gray-900">{partida.codigo} — {partida.descripcion}</h1>
+        </div>
+        <div className="flex items-center gap-2">
+          {partida.scope === "OBRA" && (
+            <>
+              <span className="text-xs bg-amber-50 text-amber-700 px-2 py-1 rounded font-medium">Partida de obra</span>
+              <button onClick={promover}
+                className="px-3 py-1.5 text-xs bg-emerald-500 text-white rounded-lg hover:bg-emerald-600">
+                Promover a catálogo APU
+              </button>
+            </>
+          )}
+          {partida.scope === "APU" && (
+            <span className="text-xs bg-emerald-50 text-emerald-700 px-2 py-1 rounded font-medium">Catálogo APU</span>
+          )}
+        </div>
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">

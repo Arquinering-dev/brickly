@@ -37,20 +37,40 @@ enum EstadoObra {
   FINALIZADA
 }
 
+enum ScopePartida {
+  APU
+  OBRA
+}
+
+enum TipoPresupuesto {
+  GENERADOR
+  APROBADO
+}
+
 model Insumo {
-  id               String        @id @default(uuid())
-  codigo           String        @unique
-  descripcion      String
-  tipo             TipoInsumo
-  unidad           String
-  precioReferencia Decimal       @db.Decimal(18, 2)
-  proveedor        String?
-  categoria        String?
-  codigoOriginal   String?
-  fechaCotizacion  DateTime?
-  composiciones    Composicion[]
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
+  id                  String        @id @default(uuid())
+  codigo              String        @unique
+  descripcion         String
+  tipo                TipoInsumo
+  unidad              String
+  precioReferencia    Decimal       @db.Decimal(18, 2)
+  proveedor           String?
+  categoria           String?
+  codigoOriginal      String?
+  fechaCotizacion     DateTime?
+  // Embedding semántico generado con Gemini text-embedding-004 (768 dims).
+  // Se usa para detectar insumos duplicados con descripciones distintas.
+  embedding           Float[]       @default([])
+  embeddingUpdatedAt  DateTime?
+  // Fingerprint del texto que produjo el embedding (descripcion+unidad+tipo).
+  // Si cambia, el embedding está obsoleto y se regenera.
+  embeddingSource     String?
+  // Trazabilidad de modificaciones IA:
+  // null = dato original del Excel | "ia" = categoría asignada automáticamente por IA
+  fuenteCategoria     String?
+  composiciones       Composicion[]
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
 }
 
 model Partida {
@@ -61,11 +81,16 @@ model Partida {
   unidad            String
   rendimiento       Decimal?           @db.Decimal(10, 4)
   tipo              TipoPartida        @default(APU)
+  scope             ScopePartida       @default(APU)
+  obraId            String?
   activa            Boolean            @default(true)
   composiciones     Composicion[]
   lineasPresupuesto LineaPresupuesto[]
+  obra              Obra?              @relation(fields: [obraId], references: [id])
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
+
+  @@index([scope, obraId])
 }
 
 model Composicion {
@@ -89,24 +114,30 @@ model Obra {
   estado            EstadoObra         @default(EN_PRESUPUESTO)
   presupuestos      PresupuestoHeader[]
   lineasPresupuesto LineaPresupuesto[]
+  partidas          Partida[]
+  planificaciones   Planificacion[]
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 }
 
 model PresupuestoHeader {
-  id        String             @id @default(uuid())
-  obraId    String
-  fecha     DateTime
-  cacValor  Decimal            @db.Decimal(12, 2)
-  mesCac    String
-  estado    String             @default("vigente")
-  nombre    String?
-  version   String?
-  coefGGBB  Decimal?           @db.Decimal(8, 4)
-  obra      Obra               @relation(fields: [obraId], references: [id])
-  lineas    LineaPresupuesto[]
-  createdAt DateTime           @default(now())
-  updatedAt DateTime           @updatedAt
+  id              String             @id @default(uuid())
+  obraId          String
+  tipo            TipoPresupuesto    @default(GENERADOR)
+  fecha           DateTime
+  cacValor        Decimal            @db.Decimal(12, 2)
+  mesCac          String
+  estado          String             @default("vigente")
+  nombre          String?
+  version         String?
+  coefGGBB        Decimal?           @db.Decimal(8, 4)
+  // Fecha absoluta del primer mes con datos en el cronograma aprobado.
+  // Se completa al importar el "Presupuesto Aprobado + Cronograma".
+  fechaInicio     DateTime?
+  obra            Obra               @relation(fields: [obraId], references: [id])
+  lineas          LineaPresupuesto[]
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
 }
 
 model LineaPresupuesto {
@@ -129,9 +160,67 @@ model LineaPresupuesto {
   precioVenta            Decimal?          @db.Decimal(18, 2)
   fuente                 String?
   apuLinkCodigo          String?
+  // true si la IA normalizó el nombre del rubro al importar (ej: "H.A." → "Hormigón Armado")
+  rubroNormalizado       Boolean           @default(false)
+  cronograma             LineaCronograma[]
   obra                   Obra              @relation(fields: [obraId], references: [id])
   presupuestoHeader      PresupuestoHeader @relation(fields: [presupuestoHeaderId], references: [id])
   partida                Partida?          @relation(fields: [partidaId], references: [id])
   createdAt              DateTime          @default(now())
   updatedAt              DateTime          @updatedAt
+}
+
+// Planificación = matriz partida × mes editable por el usuario.
+// Independiente del cronograma del presupuesto aprobado (LineaCronograma).
+// Una obra puede tener múltiples planificaciones (versiones).
+model Planificacion {
+  id          String                @id @default(uuid())
+  obraId      String
+  nombre      String
+  fechaInicio DateTime
+  duracionMeses Int
+  estado      String                @default("borrador")
+  obra        Obra                  @relation(fields: [obraId], references: [id])
+  filas       PlanificacionFila[]
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+
+  @@index([obraId])
+}
+
+model PlanificacionFila {
+  id              String        @id @default(uuid())
+  planificacionId String
+  lineaId         String?       // ref a LineaPresupuesto (preferido)
+  partidaId       String?
+  itemNumero      String?
+  rubro           String
+  descripcion     String
+  cantidad        Decimal       @db.Decimal(14, 4)
+  // JSON array de longitud duracionMeses, valores en [0,1]; suma ~1.0
+  pctPorMes       Json          @default("[]")
+  planificacion   Planificacion @relation(fields: [planificacionId], references: [id], onDelete: Cascade)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([planificacionId])
+}
+
+// Distribución mensual de ejecución de una tarea según el cronograma aprobado.
+// Los pctEjecucion de todas las filas de una misma lineaId suman ~1.0.
+model LineaCronograma {
+  id            String           @id @default(uuid())
+  lineaId       String
+  // Posición ordinal del mes en el cronograma (0, 1, 2, ...).
+  // No tiene significado por sí solo — la fecha absoluta es la fuente de verdad.
+  mesOrdinal    Int
+  // Fecha absoluta del mes (típicamente día 1).
+  fecha         DateTime
+  // Fracción del trabajo total de la tarea ejecutada en ese mes [0.0, 1.0].
+  pctEjecucion  Decimal          @db.Decimal(8, 6)
+  linea         LineaPresupuesto @relation(fields: [lineaId], references: [id], onDelete: Cascade)
+  createdAt     DateTime         @default(now())
+
+  @@unique([lineaId, mesOrdinal])
+  @@index([fecha])
 }

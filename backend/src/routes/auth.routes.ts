@@ -1,12 +1,22 @@
 import { Router, Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import rateLimit from "express-rate-limit";
 import prisma from "../prisma/client";
 import { requireAuth, AuthRequest } from "../middleware/auth.middleware";
 
+// Max 10 login attempts per IP per 15 minutes
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Demasiados intentos. Intentá de nuevo en 15 minutos." },
+});
+
 const router = Router();
 
-router.post("/login", async (req: Request, res: Response) => {
+router.post("/login", loginLimiter, async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
     if (!email || !password) {
@@ -28,7 +38,7 @@ router.post("/login", async (req: Request, res: Response) => {
     const token = jwt.sign(
       { sub: usuario.id, email: usuario.email, nombre: usuario.nombre },
       process.env.JWT_SECRET!,
-      { expiresIn: "7d" }
+      { expiresIn: "8h" }
     );
     res.json({
       token,

@@ -1,6 +1,9 @@
 import { useState, FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
+import { HardHat } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import { Button } from "../components/ui/button";
+import { Input, Label } from "../components/ui/input";
 
 const BASE = import.meta.env.VITE_API_URL ?? "";
 
@@ -37,98 +40,59 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-      <div className="w-full max-w-sm">
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
+    <div className="min-h-screen bg-gradient-to-br from-brand-50 via-stone-50 to-brand-100/40 flex items-center justify-center px-4 relative overflow-hidden">
+      {/* Decorative shapes */}
+      <div className="absolute -top-32 -right-32 h-96 w-96 rounded-full bg-brand-200/30 blur-3xl" />
+      <div className="absolute -bottom-32 -left-32 h-96 w-96 rounded-full bg-brand-300/20 blur-3xl" />
+
+      <div className="w-full max-w-sm relative">
+        <div className="bg-white rounded-3xl shadow-lg border border-stone-200/70 p-8 backdrop-blur-sm">
           <div className="flex flex-col items-center mb-8">
-            <svg
-              width="52"
-              height="52"
-              viewBox="0 0 100 100"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-              className="mb-3"
-            >
-              <path
-                d="M30 4 H92 Q96 4 96 8 V92 Q96 96 92 96 H8 Q4 96 4 92 V30 Q4 14 30 4Z"
-                fill="#3d7c38"
-              />
-              <text
-                x="50"
-                y="44"
-                textAnchor="middle"
-                fill="white"
-                fontSize="28"
-                fontFamily="Georgia, serif"
-                fontWeight="400"
-                fontStyle="italic"
-                letterSpacing="1"
-              >
-                arq
-              </text>
-              <text
-                x="50"
-                y="80"
-                textAnchor="middle"
-                fill="white"
-                fontSize="32"
-                fontFamily="Arial, sans-serif"
-                fontWeight="800"
-                letterSpacing="2"
-              >
-                ING
-              </text>
-            </svg>
-            <h1 className="text-lg font-bold text-gray-800">Groundwork</h1>
-            <p className="text-sm text-gray-400">Control de Obra</p>
+            <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-brand-600 to-brand-900 grid place-items-center mb-4 shadow-md shadow-brand-900/20">
+              <HardHat className="h-6 w-6 text-white" />
+            </div>
+            <h1 className="text-xl font-black text-stone-900 tracking-tight">Groundwork</h1>
+            <p className="text-xs text-stone-500 mt-1">Arquinering · Control de Obra</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">
-                Email
-              </label>
-              <input
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 autoFocus
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
                 placeholder="usuario@empresa.com"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">
-                Contraseña
-              </label>
-              <input
+              <Label htmlFor="password">Contraseña</Label>
+              <Input
+                id="password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
                 placeholder="••••••••"
               />
             </div>
 
             {error && (
-              <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">
+              <p className="text-xs text-danger-700 bg-danger-50 border border-danger-100 px-3 py-2 rounded-lg">
                 {error}
               </p>
             )}
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold py-2.5 rounded-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-            >
-              {loading ? "Ingresando..." : "Ingresar"}
-            </button>
+            <Button type="submit" disabled={loading} className="w-full" size="lg">
+              {loading ? "Ingresando…" : "Ingresar"}
+            </Button>
           </form>
         </div>
-        <p className="text-center text-xs text-gray-400 mt-6">
-          Arquinering S.R.L.
+        <p className="text-center text-2xs text-stone-400 mt-6 tracking-wider">
+          ARQUINERING S.R.L.
         </p>
       </div>
     </div>

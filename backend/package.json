@@ -10,13 +10,16 @@
     "db:studio": "prisma studio",
     "env:docker": "cp .env.docker .env && echo 'Now using LOCAL DOCKER db'",
     "env:supabase": "cp .env.supabase .env && echo 'Now using SUPABASE db'",
-    "create-user": "tsx scripts/create-user.ts"
+    "create-user": "tsx scripts/create-user.ts",
+    "seed:apu": "tsx scripts/seed-apu.ts"
   },
   "dependencies": {
+    "@google/genai": "^2.5.0",
     "@prisma/client": "^5.22.0",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
     "express": "^4.21.2",
+    "express-rate-limit": "^8.5.2",
     "jsonwebtoken": "^9.0.3",
     "multer": "^1.4.5-lts.1",
     "xlsx": "^0.18.5"

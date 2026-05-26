@@ -1,0 +1,13 @@
+
+# APU files (datos sensibles de cliente)
+data/apu/*.xlsx
+
+# Archivos de entorno con credenciales reales (NO commitear)
+.env
+.env.supabase
+.env.local
+.env.production
+
+# Build output
+dist/
+node_modules/

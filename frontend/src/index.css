@@ -1,9 +1,66 @@
+@import url("https://rsms.me/inter/inter.css");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --background: 60 7% 98%;        /* stone-50 */
+    --foreground: 24 10% 10%;       /* stone-900 */
+    --card: 0 0% 100%;
+    --card-foreground: 24 10% 10%;
+    --primary: 168 36% 22%;         /* brand-700 */
+    --primary-foreground: 60 7% 98%;
+    --muted: 60 5% 96%;
+    --muted-foreground: 25 5% 45%;
+    --border: 20 6% 90%;
+    --ring: 168 36% 35%;
+    --radius: 0.75rem;
+  }
+
+  html {
+    font-family: "Inter var", "Inter", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
   body {
-    @apply bg-gray-50 text-gray-900 antialiased;
+    @apply bg-surface text-stone-900 antialiased;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Mejor scrollbar para WebKit */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-stone-300/60 rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-stone-400/70;
+  }
+
+  /* Inputs nativos: anular outline default a favor del ring del design system */
+  input:focus, select:focus, textarea:focus, button:focus {
+    outline: none;
+  }
+}
+
+@layer components {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  /* Card pattern reutilizable */
+  .card {
+    @apply bg-white border border-stone-200/70 rounded-2xl shadow-sm;
+  }
+
+  /* Stat number en KPIs */
+  .stat-number {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "ss01", "cv11";
   }
 }

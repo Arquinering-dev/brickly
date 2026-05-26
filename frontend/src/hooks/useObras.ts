@@ -6,6 +6,7 @@ export interface Obra {
   id: string;
   nombre: string;
   codigo: string;
+  estado?: string;
 }
 
 const CACHE_KEY = "obras";

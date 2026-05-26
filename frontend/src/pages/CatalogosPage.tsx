@@ -1,6 +1,14 @@
-import { apiFetch } from "../lib/api";
 import { useState, useEffect } from "react";
+import { Search, Package, HardHat, Wrench, FileText } from "lucide-react";
+import { apiFetch } from "../lib/api";
+import { fmtMoney } from "../lib/format";
+import { Card } from "../components/ui/card";
+import { Input } from "../components/ui/input";
+import { Badge } from "../components/ui/badge";
+import { Skeleton } from "../components/ui/skeleton";
+import { EmptyState } from "../components/ui/empty";
 import { Paginador } from "../components/Paginador";
+import { cn } from "../lib/cn";
 
 const PER_PAGE = 25;
 
@@ -17,18 +25,12 @@ interface Insumo {
 
 type Tab = "MATERIAL" | "MANO_DE_OBRA" | "EQUIPO" | "SUBCONTRATO";
 
-const TABS: Tab[] = ["MATERIAL", "MANO_DE_OBRA", "EQUIPO", "SUBCONTRATO"];
-
-const TAB_LABELS: Record<Tab, string> = {
-  MATERIAL: "Materiales",
-  MANO_DE_OBRA: "Mano de Obra",
-  EQUIPO: "Equipos",
-  SUBCONTRATO: "Subcontratos",
-};
-
-function fmt(n: number) {
-  return Number(n).toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
+const TABS: { key: Tab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+  { key: "MATERIAL", label: "Materiales", icon: Package },
+  { key: "MANO_DE_OBRA", label: "Mano de Obra", icon: HardHat },
+  { key: "EQUIPO", label: "Equipos", icon: Wrench },
+  { key: "SUBCONTRATO", label: "Subcontratos", icon: FileText },
+];
 
 export default function CatalogosPage() {
   const [tab, setTab] = useState<Tab>("MATERIAL");
@@ -54,90 +56,103 @@ export default function CatalogosPage() {
       .catch(() => setLoading(false));
   }, [tab, search]);
 
-  const tabClass = (t: Tab) =>
-    `px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-      tab === t
-        ? "border-brand-500 text-brand-600"
-        : "border-transparent text-gray-500 hover:text-gray-700"
-    }`;
-
-  const colSpanFull = tab === "MATERIAL" ? 6 : tab === "SUBCONTRATO" ? 5 : 4;
   const paginados = insumos.slice((page - 1) * PER_PAGE, page * PER_PAGE);
 
   return (
-    <div className="p-8">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Catálogos</h1>
-
-      <div className="flex gap-1 border-b border-gray-200 mb-5">
-        {TABS.map((t) => (
-          <button key={t} className={tabClass(t)} onClick={() => setTab(t)}>
-            {TAB_LABELS[t]} {(counts[t] ?? 0) > 0 && `(${counts[t]})`}
-          </button>
-        ))}
+    <div className="p-6 lg:p-8 max-w-[1400px] mx-auto space-y-6 animate-fade-in">
+      <div>
+        <h1 className="text-2xl font-black text-stone-900 tracking-tight">Insumos</h1>
+        <p className="text-sm text-stone-500 mt-1">Catálogo maestro: materiales, mano de obra, equipos y subcontratos</p>
       </div>
 
-      <div className="mb-4">
-        <input
-          type="text"
+      {/* Tabs como pills */}
+      <div className="flex gap-2 flex-wrap">
+        {TABS.map((t) => {
+          const active = tab === t.key;
+          const Icon = t.icon;
+          return (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={cn(
+                "inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all border",
+                active
+                  ? "bg-brand-700 text-white border-brand-700 shadow-sm"
+                  : "bg-white text-stone-600 border-stone-200 hover:border-stone-300 hover:bg-stone-50"
+              )}
+            >
+              <Icon className="h-4 w-4" />
+              {t.label}
+              {(counts[t.key] ?? 0) > 0 && (
+                <span className={cn(
+                  "text-2xs px-1.5 py-0.5 rounded-md",
+                  active ? "bg-white/20 text-white" : "bg-stone-100 text-stone-500"
+                )}>
+                  {counts[t.key]}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Search */}
+      <div className="relative max-w-md">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
+        <Input
           placeholder="Buscar por código o descripción…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-72 focus:outline-none focus:ring-2 focus:ring-brand-400"
+          className="pl-9"
         />
       </div>
 
       {loading ? (
-        <div className="text-gray-400 py-8 text-center">Cargando…</div>
+        <div className="space-y-2">
+          {[0, 1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-10 rounded-lg" />)}
+        </div>
+      ) : insumos.length === 0 ? (
+        <EmptyState
+          icon={Package}
+          title="Sin insumos"
+          description="No hay insumos cargados de este tipo. Corré el seed APU para poblar el catálogo."
+        />
       ) : (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <Card className="overflow-hidden">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-gray-50 border-b border-gray-100">
-                <th className="text-left px-4 py-3 font-medium text-gray-500">Código</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-500">Descripción</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-500">Unidad</th>
-                <th className="text-right px-4 py-3 font-medium text-gray-500">Precio ref.</th>
-                {tab === "MATERIAL" && (
-                  <>
-                    <th className="text-left px-4 py-3 font-medium text-gray-500">Proveedor</th>
-                    <th className="text-left px-4 py-3 font-medium text-gray-500">Categoría</th>
-                  </>
+              <tr className="bg-stone-50 border-b border-stone-200">
+                <th className="text-left px-4 py-3 font-medium text-stone-500 text-2xs uppercase tracking-wider">Código</th>
+                <th className="text-left px-4 py-3 font-medium text-stone-500 text-2xs uppercase tracking-wider">Descripción</th>
+                <th className="text-left px-4 py-3 font-medium text-stone-500 text-2xs uppercase tracking-wider">Unidad</th>
+                <th className="text-right px-4 py-3 font-medium text-stone-500 text-2xs uppercase tracking-wider">Precio ref.</th>
+                {(tab === "MATERIAL" || tab === "SUBCONTRATO") && (
+                  <th className="text-left px-4 py-3 font-medium text-stone-500 text-2xs uppercase tracking-wider">Proveedor</th>
                 )}
-                {tab === "SUBCONTRATO" && (
-                  <th className="text-left px-4 py-3 font-medium text-gray-500">Categoría</th>
-                )}
+                <th className="text-left px-4 py-3 font-medium text-stone-500 text-2xs uppercase tracking-wider">Categoría</th>
               </tr>
             </thead>
             <tbody>
-              {insumos.length === 0 ? (
-                <tr>
-                  <td colSpan={colSpanFull} className="text-center py-12 text-gray-400">
-                    Sin datos. Importá el APU unificado primero.
+              {paginados.map((ins) => (
+                <tr key={ins.id} className="border-b border-stone-50 hover:bg-stone-50/50 transition-colors">
+                  <td className="px-4 py-2.5 font-mono text-xs text-stone-500">{ins.codigo}</td>
+                  <td className="px-4 py-2.5 text-stone-800 font-medium">{ins.descripcion}</td>
+                  <td className="px-4 py-2.5 text-stone-500 text-xs">{ins.unidad}</td>
+                  <td className="px-4 py-2.5 text-right font-bold text-stone-900 stat-number">
+                    {fmtMoney(ins.precioReferencia)}
+                  </td>
+                  {(tab === "MATERIAL" || tab === "SUBCONTRATO") && (
+                    <td className="px-4 py-2.5 text-stone-500 text-xs">{ins.proveedor ?? "—"}</td>
+                  )}
+                  <td className="px-4 py-2.5">
+                    {ins.categoria ? <Badge>{ins.categoria}</Badge> : <span className="text-stone-300 text-xs">—</span>}
                   </td>
                 </tr>
-              ) : (
-                paginados.map((ins) => (
-                  <tr key={ins.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
-                    <td className="px-4 py-2 font-mono text-xs text-gray-500">{ins.codigo}</td>
-                    <td className="px-4 py-2 text-gray-800">{ins.descripcion}</td>
-                    <td className="px-4 py-2 text-gray-500">{ins.unidad}</td>
-                    <td className="px-4 py-2 text-right font-medium text-gray-700">${fmt(ins.precioReferencia)}</td>
-                    {tab === "MATERIAL" && (
-                      <>
-                        <td className="px-4 py-2 text-gray-500">{ins.proveedor ?? "—"}</td>
-                        <td className="px-4 py-2 text-gray-500">{ins.categoria ?? "—"}</td>
-                      </>
-                    )}
-                    {tab === "SUBCONTRATO" && (
-                      <td className="px-4 py-2 text-gray-500">{ins.categoria ?? "—"}</td>
-                    )}
-                  </tr>
-                ))
-              )}
+              ))}
             </tbody>
           </table>
           <Paginador total={insumos.length} page={page} perPage={PER_PAGE} onChange={setPage} />
-        </div>
+        </Card>
       )}
     </div>
   );

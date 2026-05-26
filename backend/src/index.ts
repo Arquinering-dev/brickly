@@ -1,9 +1,11 @@
 import express from "express";
 import cors from "cors";
-import importRoutes from "./routes/import.routes";
 import partidasRoutes from "./routes/partidas.routes";
 import insumosRoutes from "./routes/insumos.routes";
 import obrasRoutes from "./routes/obras.routes";
+import presupuestosRoutes from "./routes/presupuestos.routes";
+import planificacionRoutes from "./routes/planificacion.routes";
+import dashboardRoutes from "./routes/dashboard.routes";
 import authRoutes from "./routes/auth.routes";
 import { requireAuth } from "./middleware/auth.middleware";
 import prisma from "./prisma/client";
@@ -39,10 +41,12 @@ app.get("/api/health", async (_req, res) => {
 });
 app.use("/api/auth", authRoutes);
 
-app.use("/api/import", requireAuth, importRoutes);
 app.use("/api/partidas", requireAuth, partidasRoutes);
 app.use("/api/insumos", requireAuth, insumosRoutes);
 app.use("/api/obras", requireAuth, obrasRoutes);
+app.use("/api/presupuestos", requireAuth, presupuestosRoutes);
+app.use("/api/planificacion", requireAuth, planificacionRoutes);
+app.use("/api/dashboard", requireAuth, dashboardRoutes);
 
 app.listen(PORT, () => {
   console.log(`Groundwork backend corriendo en http://localhost:${PORT}`);
