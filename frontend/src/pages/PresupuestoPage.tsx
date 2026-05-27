@@ -11,7 +11,7 @@ const fmtNum = (n: number, dec = 2) =>
   n.toLocaleString("es-AR", { minimumFractionDigits: dec, maximumFractionDigits: dec });
 
 // ────────────────────────────────────────────────────────────────────────────────
-// Tipos compartidos
+// Tipos
 interface PresupuestoListItem {
   id: string;
   obra: { id: string; nombre: string; codigo: string; estado: string };
@@ -31,37 +31,8 @@ interface PresupuestoListItem {
   createdAt: string;
 }
 
-interface LineaPreview {
-  itemNumero: string | null;
-  descripcion: string;
-  unidad: string;
-  cantidad: number;
-  matUd: number;
-  moUd: number;
-  eqUd: number;
-  precioUnitario: number;
-  precioVenta: number | null;
-  rubro: string;
-  isRubroRow: boolean;
-  cronograma?: number[];
-  match?: { partidaId: string; codigo: string; descripcion: string; score: number } | null;
-  // Editable state local (no viene del backend)
-  partidaId?: string | null;
-  crearPartidaObra?: boolean;
-}
-
-interface PreviewResult {
-  obraDetectada: { nombre: string; codigo: string } | null;
-  formato: string;
-  hojaUsada: string;
-  totales: { totalCD: number; totalPV: number; tareasCount: number; rubrosCount: number };
-  lineas: LineaPreview[];
-  cronogramaMeses: { mesOrdinal: number; fecha: string | null; etiqueta: string }[];
-  warnings: string[];
-}
-
 // ────────────────────────────────────────────────────────────────────────────────
-// Componente raíz: enruta entre lista / nuevo / detalle
+// Componente raíz
 export default function PresupuestoPage() {
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
@@ -105,7 +76,7 @@ function PresupuestoLista() {
           <p className="text-sm text-gray-500">{items.length} presupuestos</p>
         </div>
         <button
-          onClick={() => navigate("/presupuesto/nuevo")}
+          onClick={() => navigate("/catalogo/presupuestos/nuevo")}
           className="px-5 py-2.5 bg-brand-500 text-white rounded-lg text-sm font-semibold hover:bg-brand-600 shadow-sm"
         >
           + Nuevo presupuesto
@@ -113,11 +84,10 @@ function PresupuestoLista() {
       </div>
 
       <div className="flex gap-2 mb-5">
-        {[
-          { val: "" as const, label: "Todos" },
-          { val: "GENERADOR" as const, label: "Generador" },
-          { val: "APROBADO" as const, label: "Aprobado" },
-        ].map((f) => (
+        {([ { val: "" as const, label: "Todos" },
+            { val: "GENERADOR" as const, label: "Generador" },
+            { val: "APROBADO" as const, label: "Aprobado" },
+        ] as const).map((f) => (
           <button
             key={f.val || "all"}
             onClick={() => setFilterTipo(f.val)}
@@ -141,7 +111,7 @@ function PresupuestoLista() {
           {items.map((p) => (
             <button
               key={p.id}
-              onClick={() => navigate(`/presupuesto/${p.id}`)}
+              onClick={() => navigate(`/catalogo/presupuestos/${p.id}`)}
               className="text-left bg-white rounded-2xl border border-gray-200 shadow-sm hover:shadow-md hover:border-brand-300 transition-all p-5"
             >
               <div className="flex items-center justify-between mb-3">
@@ -194,7 +164,7 @@ function PresupuestoLista() {
 // EDITOR (nuevo o existente)
 function PresupuestoEditor({ mode, headerId }: { mode: "new" | "edit"; headerId?: string }) {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<"datos" | "lineas" | "import">(mode === "new" ? "import" : "datos");
+  const [activeTab, setActiveTab] = useState<"datos" | "lineas">("datos");
   const [tipo, setTipo] = useState<"GENERADOR" | "APROBADO">("GENERADOR");
   const [headerNombre, setHeaderNombre] = useState("");
   const [headerVersion, setHeaderVersion] = useState("");
@@ -204,7 +174,6 @@ function PresupuestoEditor({ mode, headerId }: { mode: "new" | "edit"; headerId?
   const [existingHeader, setExistingHeader] = useState<PresupuestoListItem | null>(null);
   const [loading, setLoading] = useState(mode === "edit");
 
-  // Cargar header existente
   useEffect(() => {
     if (mode !== "edit" || !headerId) return;
     setLoading(true);
@@ -228,7 +197,7 @@ function PresupuestoEditor({ mode, headerId }: { mode: "new" | "edit"; headerId?
   return (
     <div className="p-8 max-w-7xl">
       <div className="flex items-center gap-3 mb-6">
-        <button onClick={() => navigate("/presupuesto")} className="text-gray-400 hover:text-gray-700 text-sm">
+        <button onClick={() => navigate("/catalogo/presupuestos")} className="text-gray-400 hover:text-gray-700 text-sm">
           ← Presupuestos
         </button>
         <span className="text-gray-300">/</span>
@@ -238,36 +207,13 @@ function PresupuestoEditor({ mode, headerId }: { mode: "new" | "edit"; headerId?
       </div>
 
       <div className="flex gap-1 border-b border-gray-200 mb-6">
-        {mode === "new" && (
-          <TabBtn active={activeTab === "import"} onClick={() => setActiveTab("import")}>
-            1. Importar xlsx
-          </TabBtn>
-        )}
         <TabBtn active={activeTab === "datos"} onClick={() => setActiveTab("datos")}>
-          {mode === "new" ? "2." : ""} Datos
+          Datos
         </TabBtn>
         <TabBtn active={activeTab === "lineas"} onClick={() => setActiveTab("lineas")}>
-          {mode === "new" ? "3." : ""} Líneas {existingHeader?.lineasCount ? `(${existingHeader.lineasCount})` : ""}
+          Líneas {existingHeader?.lineasCount ? `(${existingHeader.lineasCount})` : ""}
         </TabBtn>
       </div>
-
-      {activeTab === "import" && mode === "new" && (
-        <ImportTab
-          tipo={tipo}
-          onTipoChange={setTipo}
-          obraNombre={obraNombre}
-          obraCodigo={obraCodigo}
-          headerNombre={headerNombre}
-          headerVersion={headerVersion}
-          onChange={(o) => {
-            setObraNombre(o.obraNombre);
-            setObraCodigo(o.obraCodigo);
-            setHeaderNombre(o.headerNombre);
-            setHeaderVersion(o.headerVersion);
-          }}
-          onSaved={(headerId) => navigate(`/presupuesto/${headerId}`)}
-        />
-      )}
 
       {activeTab === "datos" && (
         <DatosTab
@@ -285,6 +231,7 @@ function PresupuestoEditor({ mode, headerId }: { mode: "new" | "edit"; headerId?
           setObraNombre={setObraNombre}
           obraCodigo={obraCodigo}
           setObraCodigo={setObraCodigo}
+          onCreated={(id) => navigate(`/catalogo/presupuestos/${id}`)}
         />
       )}
 
@@ -293,7 +240,7 @@ function PresupuestoEditor({ mode, headerId }: { mode: "new" | "edit"; headerId?
       )}
       {activeTab === "lineas" && mode === "new" && (
         <div className="bg-gray-50 rounded-2xl p-12 text-center text-gray-400 text-sm">
-          Primero importá un xlsx o guardá los datos del presupuesto.
+          Primero guardá los datos del presupuesto.
         </div>
       )}
     </div>
@@ -314,319 +261,11 @@ function TabBtn({ active, onClick, children }: { active: boolean; onClick: () =>
 }
 
 // ────────────────────────────────────────────────────────────────────────────────
-// TAB: Importar xlsx (preview + confirmar)
-function ImportTab({
-  tipo, onTipoChange, obraNombre, obraCodigo, headerNombre, headerVersion,
-  onChange, onSaved,
-}: {
-  tipo: "GENERADOR" | "APROBADO";
-  onTipoChange: (t: "GENERADOR" | "APROBADO") => void;
-  obraNombre: string;
-  obraCodigo: string;
-  headerNombre: string;
-  headerVersion: string;
-  onChange: (o: { obraNombre: string; obraCodigo: string; headerNombre: string; headerVersion: string }) => void;
-  onSaved: (headerId: string) => void;
-}) {
-  const { obras } = useObras();
-  const [file, setFile] = useState<File | null>(null);
-  const [parsing, setParsing] = useState(false);
-  const [preview, setPreview] = useState<PreviewResult | null>(null);
-  const [lineas, setLineas] = useState<LineaPreview[]>([]);
-  const [existingObraId, setExistingObraId] = useState<string>("");
-  const [saving, setSaving] = useState(false);
-
-  const parse = async (f: File) => {
-    setParsing(true);
-    const fd = new FormData();
-    fd.append("file", f);
-    fd.append("tipo", tipo);
-    const res = await apiFetch("/api/presupuestos/parse-xlsx", { method: "POST", body: fd });
-    if (res.ok) {
-      const data: PreviewResult = await res.json();
-      setPreview(data);
-      // Inicializar estado editable de líneas (partidaId desde match)
-      setLineas(data.lineas.map((l) => ({
-        ...l,
-        partidaId: l.match?.partidaId ?? null,
-        crearPartidaObra: !l.isRubroRow && !l.match,
-      })));
-      // Pre-llenar obra detectada si no existe en BD
-      if (data.obraDetectada) {
-        const existente = obras.find((o) => o.codigo === data.obraDetectada!.codigo);
-        if (existente) setExistingObraId(existente.id);
-        onChange({
-          obraNombre: data.obraDetectada.nombre,
-          obraCodigo: data.obraDetectada.codigo,
-          headerNombre,
-          headerVersion,
-        });
-      }
-    }
-    setParsing(false);
-  };
-
-  const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0];
-    if (f) { setFile(f); parse(f); }
-  };
-
-  const stats = useMemo(() => {
-    if (!preview) return null;
-    const tareas = lineas.filter((l) => !l.isRubroRow);
-    const conMatch = tareas.filter((l) => l.partidaId && !l.crearPartidaObra).length;
-    const nuevas = tareas.filter((l) => l.crearPartidaObra).length;
-    return { tareas: tareas.length, conMatch, nuevas, rubros: preview.totales.rubrosCount };
-  }, [preview, lineas]);
-
-  const confirmar = async () => {
-    if (!preview) return;
-    setSaving(true);
-    const body = {
-      tipo,
-      obraId: existingObraId || undefined,
-      obraNombre: existingObraId ? undefined : obraNombre,
-      obraCodigo: existingObraId ? undefined : obraCodigo,
-      nombre: headerNombre || preview.obraDetectada?.nombre || null,
-      version: headerVersion || null,
-      lineas,
-      cronogramaMeses: preview.cronogramaMeses,
-    };
-    const res = await apiFetch("/api/presupuestos/confirmar-import", {
-      method: "POST",
-      body: JSON.stringify(body),
-    });
-    setSaving(false);
-    if (res.ok) {
-      const data = await res.json();
-      onSaved(data.header.id);
-    } else {
-      const err = await res.json().catch(() => ({}));
-      alert(err.error ?? "Error al guardar");
-    }
-  };
-
-  return (
-    <div className="space-y-5">
-      {!preview && (
-        <>
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-            <p className="text-sm font-semibold text-gray-700 mb-3">Tipo de presupuesto</p>
-            <div className="flex gap-2 mb-4">
-              {(["GENERADOR", "APROBADO"] as const).map((t) => (
-                <button
-                  key={t}
-                  onClick={() => onTipoChange(t)}
-                  className={`px-4 py-2 text-sm rounded-lg font-medium transition-colors ${
-                    tipo === t ? "bg-brand-500 text-white" : "border border-gray-200 text-gray-600 hover:bg-gray-50"
-                  }`}
-                >
-                  {t === "GENERADOR" ? "Generador (estimación)" : "Aprobado (precio venta + cronograma)"}
-                </button>
-              ))}
-            </div>
-            <label className="block">
-              <div className="border-2 border-dashed border-gray-300 rounded-2xl p-10 text-center cursor-pointer hover:border-brand-400 hover:bg-brand-50/30 transition-colors">
-                <p className="text-sm font-medium text-gray-700 mb-1">
-                  {parsing ? "Procesando…" : "Arrastrá o clickeá para subir el .xlsx"}
-                </p>
-                <p className="text-xs text-gray-400">
-                  {tipo === "GENERADOR"
-                    ? "Presupuesto de obra calculado (formato GDR / Arquinering)"
-                    : "Presupuesto aprobado con precio venta y cronograma mes a mes"}
-                </p>
-                <input type="file" accept=".xlsx" className="hidden" onChange={onFileChange} />
-              </div>
-            </label>
-          </div>
-        </>
-      )}
-
-      {preview && (
-        <>
-          {/* Banner resumen */}
-          <div className="bg-gradient-to-br from-brand-500 to-brand-600 text-white rounded-2xl p-5 shadow-sm">
-            <div className="flex items-start justify-between flex-wrap gap-4">
-              <div>
-                <p className="text-xs uppercase tracking-wider text-brand-100 mb-1">
-                  Archivo · hoja "{preview.hojaUsada}"
-                </p>
-                <p className="text-lg font-bold">{file?.name}</p>
-                <p className="text-sm text-brand-100">
-                  Formato: {preview.formato} · {tipo}
-                </p>
-              </div>
-              {stats && (
-                <div className="grid grid-cols-4 gap-6 text-center">
-                  <Stat label="Rubros" value={stats.rubros} />
-                  <Stat label="Tareas" value={stats.tareas} />
-                  <Stat label="Match APU" value={stats.conMatch} accent="emerald" />
-                  <Stat label="Nuevas" value={stats.nuevas} accent="amber" />
-                </div>
-              )}
-            </div>
-            <div className="mt-4 grid grid-cols-2 gap-4 pt-4 border-t border-white/20">
-              <div>
-                <p className="text-xs text-brand-100">Costo directo total</p>
-                <p className="text-xl font-bold">{fmtMoney(preview.totales.totalCD)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-brand-100">Precio venta total</p>
-                <p className="text-xl font-bold">
-                  {preview.totales.totalPV > 0 ? fmtMoney(preview.totales.totalPV) : "—"}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Datos obra */}
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-            <p className="text-sm font-semibold text-gray-700 mb-3">Obra</p>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Obra existente</label>
-                <select value={existingObraId} onChange={(e) => setExistingObraId(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400">
-                  <option value="">— Crear nueva —</option>
-                  {obras.map((o) => <option key={o.id} value={o.id}>{o.codigo} · {o.nombre}</option>)}
-                </select>
-              </div>
-              {!existingObraId && (
-                <>
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">Nombre</label>
-                    <input value={obraNombre}
-                      onChange={(e) => onChange({ obraNombre: e.target.value, obraCodigo, headerNombre, headerVersion })}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400" />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">Código</label>
-                    <input value={obraCodigo}
-                      onChange={(e) => onChange({ obraNombre, obraCodigo: e.target.value, headerNombre, headerVersion })}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400" />
-                  </div>
-                </>
-              )}
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Nombre del presupuesto</label>
-                <input value={headerNombre}
-                  onChange={(e) => onChange({ obraNombre, obraCodigo, headerNombre: e.target.value, headerVersion })}
-                  placeholder="ej: Presupuesto inicial obra civil"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400" />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Versión</label>
-                <input value={headerVersion}
-                  onChange={(e) => onChange({ obraNombre, obraCodigo, headerNombre, headerVersion: e.target.value })}
-                  placeholder="ej: 01"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400" />
-              </div>
-            </div>
-          </div>
-
-          {/* Tabla preview con bucket switches */}
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-            <div className="px-5 py-3 border-b border-gray-100 bg-gray-50">
-              <p className="text-sm font-semibold text-gray-700">Vista previa · {lineas.length} filas</p>
-              <p className="text-xs text-gray-500">Verificá que cada tarea esté correctamente mapeada. Las partidas sin match se crearán como específicas de la obra.</p>
-            </div>
-            <div className="max-h-[600px] overflow-y-auto">
-              <table className="w-full text-sm">
-                <thead className="sticky top-0 bg-white border-b border-gray-200">
-                  <tr>
-                    <th className="text-left px-3 py-2 font-medium text-gray-500 text-xs">Item</th>
-                    <th className="text-left px-3 py-2 font-medium text-gray-500 text-xs">Descripción</th>
-                    <th className="text-left px-3 py-2 font-medium text-gray-500 text-xs">U</th>
-                    <th className="text-right px-3 py-2 font-medium text-gray-500 text-xs">Cant</th>
-                    <th className="text-right px-3 py-2 font-medium text-gray-500 text-xs">P. Unit</th>
-                    <th className="text-right px-3 py-2 font-medium text-gray-500 text-xs">Total</th>
-                    <th className="text-left px-3 py-2 font-medium text-gray-500 text-xs">Destino</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {lineas.map((l, idx) => l.isRubroRow ? (
-                    <tr key={idx} className="bg-gray-50 border-t border-gray-100">
-                      <td className="px-3 py-2 font-mono text-xs text-gray-500">{l.itemNumero}</td>
-                      <td colSpan={6} className="px-3 py-2 text-xs font-bold text-gray-700 uppercase">{l.descripcion}</td>
-                    </tr>
-                  ) : (
-                    <tr key={idx} className="border-t border-gray-50 hover:bg-gray-50/50">
-                      <td className="px-3 py-2 font-mono text-xs text-gray-500">{l.itemNumero}</td>
-                      <td className="px-3 py-2 text-gray-700 max-w-md truncate" title={l.descripcion}>{l.descripcion}</td>
-                      <td className="px-3 py-2 text-gray-500 text-xs">{l.unidad}</td>
-                      <td className="px-3 py-2 text-right text-gray-700 text-xs">{fmtNum(l.cantidad, 2)}</td>
-                      <td className="px-3 py-2 text-right text-gray-700 text-xs">{fmtMoney(l.precioUnitario)}</td>
-                      <td className="px-3 py-2 text-right font-medium text-gray-800 text-xs">{fmtMoney(l.cantidad * l.precioUnitario)}</td>
-                      <td className="px-3 py-2">
-                        {l.match && l.partidaId === l.match.partidaId && !l.crearPartidaObra ? (
-                          <button
-                            onClick={() => setLineas((arr) => arr.map((x, i) => i === idx ? { ...x, partidaId: null, crearPartidaObra: true } : x))}
-                            className="text-xs bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded hover:bg-emerald-100"
-                            title={`Match ${(l.match.score * 100).toFixed(0)}%: ${l.match.descripcion}`}
-                          >
-                            ✓ APU {l.match.codigo}
-                          </button>
-                        ) : (
-                          <div className="flex items-center gap-1">
-                            <span className="text-xs bg-amber-50 text-amber-700 px-2 py-0.5 rounded">
-                              Nueva (obra)
-                            </span>
-                            {l.match && (
-                              <button
-                                onClick={() => setLineas((arr) => arr.map((x, i) => i === idx ? { ...x, partidaId: l.match!.partidaId, crearPartidaObra: false } : x))}
-                                className="text-xs text-brand-600 hover:underline"
-                                title={`Usar match: ${l.match.descripcion}`}
-                              >
-                                · usar {l.match.codigo}
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div className="flex justify-between items-center">
-            <button
-              onClick={() => { setPreview(null); setFile(null); setLineas([]); }}
-              className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
-            >
-              ← Subir otro archivo
-            </button>
-            <button
-              onClick={confirmar}
-              disabled={saving || (!existingObraId && (!obraNombre || !obraCodigo))}
-              className="px-6 py-2.5 bg-brand-500 text-white rounded-lg font-semibold hover:bg-brand-600 disabled:opacity-50 shadow-sm"
-            >
-              {saving ? "Guardando…" : "Confirmar e importar"}
-            </button>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-function Stat({ label, value, accent }: { label: string; value: number; accent?: "emerald" | "amber" }) {
-  return (
-    <div>
-      <p className={`text-2xl font-black ${accent === "emerald" ? "text-emerald-200" : accent === "amber" ? "text-amber-200" : ""}`}>{value}</p>
-      <p className="text-[10px] uppercase tracking-wider text-brand-100">{label}</p>
-    </div>
-  );
-}
-
-// ────────────────────────────────────────────────────────────────────────────────
-// TAB: Datos (editar header)
+// TAB: Datos (editar/crear header)
 function DatosTab({
   mode, headerId, tipo, setTipo, nombre, setNombre, version, setVersion,
   obraId, setObraId, obraNombre, setObraNombre, obraCodigo, setObraCodigo,
+  onCreated,
 }: {
   mode: "new" | "edit";
   headerId?: string;
@@ -642,22 +281,30 @@ function DatosTab({
   setObraNombre: (s: string) => void;
   obraCodigo: string;
   setObraCodigo: (s: string) => void;
+  onCreated?: (headerId: string) => void;
 }) {
   const { obras } = useObras();
   const [saving, setSaving] = useState(false);
 
   const guardar = async () => {
+    setSaving(true);
     if (mode === "edit" && headerId) {
-      setSaving(true);
       await apiFetch(`/api/presupuestos/${headerId}`, {
         method: "PUT",
         body: JSON.stringify({ nombre, version }),
       });
-      setSaving(false);
     } else {
-      // En modo new se crea solo desde el tab importar
-      alert("Subí un xlsx desde la pestaña Importar para crear el presupuesto");
+      // Crear presupuesto vacío
+      const res = await apiFetch("/api/presupuestos", {
+        method: "POST",
+        body: JSON.stringify({ tipo, obraId: obraId || undefined, obraNombre, obraCodigo, nombre, version }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        onCreated?.(data.id ?? data.header?.id);
+      }
     }
+    setSaving(false);
   };
 
   return (
@@ -684,11 +331,13 @@ function DatosTab({
         <div>
           <label className="block text-xs text-gray-500 mb-1">Nombre</label>
           <input value={nombre} onChange={(e) => setNombre(e.target.value)}
+            placeholder="ej: Presupuesto inicial obra civil"
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400" />
         </div>
         <div>
           <label className="block text-xs text-gray-500 mb-1">Versión</label>
           <input value={version} onChange={(e) => setVersion(e.target.value)}
+            placeholder="ej: 01"
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400" />
         </div>
       </div>
@@ -719,7 +368,7 @@ function DatosTab({
       <div className="flex justify-end">
         <button onClick={guardar} disabled={saving}
           className="px-5 py-2 bg-brand-500 text-white rounded-lg text-sm font-semibold hover:bg-brand-600 disabled:opacity-50">
-          {saving ? "Guardando…" : "Guardar"}
+          {saving ? "Guardando…" : mode === "new" ? "Crear presupuesto" : "Guardar"}
         </button>
       </div>
     </div>
@@ -771,6 +420,12 @@ function LineasTab({ headerId }: { headerId: string }) {
   const totalPV = lineas.reduce((s, l) => s + Number(l.cantidad) * Number(l.precioVenta ?? 0), 0);
 
   if (loading) return <div className="text-gray-400 text-sm">Cargando líneas…</div>;
+
+  if (lineas.length === 0) return (
+    <div className="py-20 text-center text-gray-400 text-sm">
+      Este presupuesto no tiene líneas todavía.
+    </div>
+  );
 
   return (
     <div className="space-y-4">

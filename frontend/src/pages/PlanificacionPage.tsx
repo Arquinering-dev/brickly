@@ -1,13 +1,12 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
-import { ArrowLeft, Upload, Plus, FileSpreadsheet, Sparkles, AlertCircle } from "lucide-react";
+import { ArrowLeft, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "../lib/api";
 import { useObras } from "../hooks/useObras";
 import { Button } from "../components/ui/button";
 import { Input, Label } from "../components/ui/input";
 import { Card } from "../components/ui/card";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "../components/ui/tabs";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "../components/ui/select";
 
 const fmtPct = (n: number) => `${(n * 100).toFixed(1)}%`;
@@ -70,7 +69,7 @@ function PlanificacionLista() {
           <p className="text-sm text-gray-500">{items.length} planificaciones</p>
         </div>
         <button
-          onClick={() => navigate("/planificacion/nueva")}
+          onClick={() => navigate("/catalogo/planificaciones/nueva")}
           className="px-5 py-2.5 bg-brand-500 text-white rounded-lg text-sm font-semibold hover:bg-brand-600 shadow-sm"
         >
           + Nueva planificación
@@ -88,7 +87,7 @@ function PlanificacionLista() {
           {items.map((p) => (
             <button
               key={p.id}
-              onClick={() => navigate(`/planificacion/${p.id}`)}
+              onClick={() => navigate(`/catalogo/planificaciones/${p.id}`)}
               className="text-left bg-white rounded-2xl border border-gray-200 shadow-sm hover:shadow-md hover:border-brand-300 transition-all p-5"
             >
               <p className="text-xs uppercase tracking-wider text-gray-400 mb-1">{p.obra.codigo}</p>
@@ -137,7 +136,6 @@ function PlanificacionEditor({ mode, planId }: { mode: "new" | "edit"; planId?: 
   const [presupuestosObra, setPresupuestosObra] = useState<{ id: string; nombre: string | null; tipo: string }[]>([]);
   const [fromHeaderId, setFromHeaderId] = useState<string>("");
 
-  // Cargar planificación existente
   useEffect(() => {
     if (mode !== "edit" || !planId) return;
     setLoading(true);
@@ -160,7 +158,6 @@ function PlanificacionEditor({ mode, planId }: { mode: "new" | "edit"; planId?: 
       .catch(() => setLoading(false));
   }, [mode, planId]);
 
-  // Al elegir obra, cargar sus presupuestos para pre-llenado
   useEffect(() => {
     if (!obraId || mode !== "new") return;
     apiFetch(`/api/presupuestos?obraId=${obraId}`)
@@ -203,98 +200,74 @@ function PlanificacionEditor({ mode, planId }: { mode: "new" | "edit"; planId?: 
 
   if (mode === "new") {
     return (
-      <div className="p-6 lg:p-8 max-w-3xl mx-auto animate-fade-in">
+      <div className="p-6 lg:p-8 max-w-2xl mx-auto">
         <button onClick={() => navigate(-1)}
           className="inline-flex items-center gap-1.5 text-sm text-stone-500 hover:text-stone-800 transition-colors mb-3">
           <ArrowLeft className="h-4 w-4" /> Volver
         </button>
         <h1 className="text-2xl font-black text-stone-900 tracking-tight mb-6">Nueva planificación</h1>
 
-        <Tabs defaultValue="manual">
-          <TabsList>
-            <TabsTrigger value="manual">
-              <Plus className="h-3.5 w-3.5 mr-1.5 inline-block" />
-              Crear manual
-            </TabsTrigger>
-            <TabsTrigger value="xlsx">
-              <Upload className="h-3.5 w-3.5 mr-1.5 inline-block" />
-              Importar xlsx
-            </TabsTrigger>
-          </TabsList>
+        <Card className="p-6 space-y-5">
+          <div>
+            <Label>Obra *</Label>
+            <Select value={obraId} onValueChange={setObraId}>
+              <SelectTrigger>
+                <SelectValue placeholder="— Seleccionar obra —" />
+              </SelectTrigger>
+              <SelectContent>
+                {obras.map((o) => (
+                  <SelectItem key={o.id} value={o.id}>{o.codigo} · {o.nombre}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
-          <TabsContent value="manual">
-            <Card className="p-6 space-y-5">
-              <div>
-                <Label>Obra *</Label>
-                <Select value={obraId} onValueChange={setObraId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="— Seleccionar obra —" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {obras.map((o) => (
-                      <SelectItem key={o.id} value={o.id}>{o.codigo} · {o.nombre}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+          <div>
+            <Label>Nombre</Label>
+            <Input value={nombre} onChange={(e) => setNombre(e.target.value)} />
+          </div>
 
-              <div>
-                <Label>Nombre</Label>
-                <Input value={nombre} onChange={(e) => setNombre(e.target.value)} />
-              </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label>Fecha de inicio *</Label>
+              <Input type="date" value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)} />
+            </div>
+            <div>
+              <Label>Duración (meses) *</Label>
+              <Input type="number" min={1} max={60} value={duracionMeses}
+                onChange={(e) => setDuracionMeses(parseInt(e.target.value) || 12)} />
+            </div>
+          </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>Fecha de inicio *</Label>
-                  <Input type="date" value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)} />
-                </div>
-                <div>
-                  <Label>Duración (meses) *</Label>
-                  <Input type="number" min={1} max={60} value={duracionMeses}
-                    onChange={(e) => setDuracionMeses(parseInt(e.target.value) || 12)} />
-                </div>
-              </div>
+          {presupuestosObra.length > 0 && (
+            <div>
+              <Label>Pre-llenar desde presupuesto</Label>
+              <Select value={fromHeaderId} onValueChange={setFromHeaderId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="— No pre-llenar —" />
+                </SelectTrigger>
+                <SelectContent>
+                  {presupuestosObra.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.tipo === "APROBADO" ? "⭐ " : "📝 "}{p.nombre ?? p.tipo}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-stone-500 mt-1.5 flex items-center gap-1">
+                <Sparkles className="h-3 w-3" />
+                Pre-llena las tareas desde el presupuesto seleccionado.
+              </p>
+            </div>
+          )}
 
-              {presupuestosObra.length > 0 && (
-                <div>
-                  <Label>Pre-llenar desde presupuesto</Label>
-                  <Select value={fromHeaderId} onValueChange={setFromHeaderId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="— No pre-llenar —" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {presupuestosObra.map((p) => (
-                        <SelectItem key={p.id} value={p.id}>
-                          {p.tipo === "APROBADO" ? "⭐ " : "📝 "}{p.nombre ?? p.tipo}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-stone-500 mt-1.5 flex items-center gap-1">
-                    <Sparkles className="h-3 w-3" />
-                    Si el presupuesto aprobado trae cronograma, se carga la curva de cada tarea.
-                  </p>
-                </div>
-              )}
-
-              <div className="flex justify-end gap-2 pt-2">
-                <Button variant="outline" onClick={() => navigate("/catalogo/planificaciones")}>Cancelar</Button>
-                <Button onClick={crear} disabled={creating || !obraId}>
-                  {creating ? "Creando…" : "Crear y abrir editor"}
-                </Button>
-              </div>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="xlsx">
-            <ImportXlsxPanel
-              obras={obras}
-              defaultObraId={obraId}
-              onCreated={(id) => navigate(`/catalogo/planificaciones/${id}`)}
-              onCancel={() => navigate("/catalogo/planificaciones")}
-            />
-          </TabsContent>
-        </Tabs>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => navigate("/catalogo/planificaciones")}>Cancelar</Button>
+            <Button onClick={crear} disabled={creating || !obraId}>
+              {creating ? "Creando…" : "Crear y abrir editor"}
+            </Button>
+          </div>
+        </Card>
       </div>
     );
   }
@@ -317,268 +290,6 @@ function PlanificacionEditor({ mode, planId }: { mode: "new" | "edit"; planId?: 
 }
 
 // ────────────────────────────────────────────────────────────────────────────────
-// Panel: Importar planificación desde xlsx
-interface XlsxPreview {
-  obraDetectada: { nombre: string; codigo: string } | null;
-  formato: string;
-  hojaUsada: string;
-  totales: { totalCD: number; totalPV: number; tareasCount: number; rubrosCount: number };
-  cronogramaMeses: { mesOrdinal: number; fecha: string | null; etiqueta: string }[];
-  lineas: Array<{
-    itemNumero: string | null;
-    descripcion: string;
-    cantidad: number;
-    rubro: string;
-    isRubroRow: boolean;
-    cronograma?: number[];
-  }>;
-  warnings: string[];
-}
-
-function ImportXlsxPanel({
-  obras, defaultObraId, onCreated, onCancel,
-}: {
-  obras: { id: string; nombre: string; codigo: string }[];
-  defaultObraId: string;
-  onCreated: (id: string) => void;
-  onCancel: () => void;
-}) {
-  const [file, setFile] = useState<File | null>(null);
-  const [parsing, setParsing] = useState(false);
-  const [preview, setPreview] = useState<XlsxPreview | null>(null);
-  const [obraId, setObraId] = useState(defaultObraId);
-  const [nombre, setNombre] = useState("Planificación importada");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const parse = async (f: File) => {
-    setParsing(true);
-    setError(null);
-    const fd = new FormData();
-    fd.append("file", f);
-    const res = await apiFetch("/api/planificacion/parse-xlsx", { method: "POST", body: fd });
-    setParsing(false);
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      setError(err.error ?? "Error al parsear archivo");
-      return;
-    }
-    const data: XlsxPreview = await res.json();
-    setPreview(data);
-    // Auto-match obra detectada
-    if (data.obraDetectada) {
-      const match = obras.find((o) => o.codigo === data.obraDetectada!.codigo);
-      if (match) setObraId(match.id);
-    }
-  };
-
-  const fechaInicio = preview?.cronogramaMeses.find((m) => m.fecha)?.fecha?.slice(0, 10)
-    ?? new Date().toISOString().slice(0, 10);
-  const duracionMeses = preview?.cronogramaMeses.length ?? 0;
-
-  const importar = async () => {
-    if (!preview || !obraId) return;
-    setSaving(true);
-    const filas = preview.lineas
-      .filter((l) => !l.isRubroRow && l.cantidad > 0 && (l.cronograma?.some((p) => p > 0) ?? false))
-      .map((l) => ({
-        itemNumero: l.itemNumero,
-        rubro: l.rubro,
-        descripcion: l.descripcion,
-        cantidad: l.cantidad,
-        pctPorMes: (() => {
-          const arr = new Array(duracionMeses).fill(0);
-          if (!l.cronograma) return arr;
-          for (let i = 0; i < Math.min(l.cronograma.length, duracionMeses); i++) {
-            arr[i] = l.cronograma[i];
-          }
-          return arr;
-        })(),
-      }));
-    const res = await apiFetch("/api/planificacion/from-xlsx", {
-      method: "POST",
-      body: JSON.stringify({ obraId, nombre, fechaInicio, duracionMeses, filas }),
-    });
-    setSaving(false);
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      toast.error(err.error ?? "Error al importar");
-      return;
-    }
-    const data = await res.json();
-    toast.success(`Planificación creada con ${filas.length} tareas`);
-    onCreated(data.id);
-  };
-
-  const conCronograma = preview?.lineas.filter((l) => !l.isRubroRow && (l.cronograma?.some((p) => p > 0) ?? false)).length ?? 0;
-  const sinCronograma = preview ? preview.totales.tareasCount - conCronograma : 0;
-
-  if (!preview) {
-    return (
-      <Card className="p-8">
-        <div className="text-center mb-6">
-          <div className="inline-grid place-items-center h-14 w-14 rounded-2xl bg-brand-50 text-brand-700 mb-3">
-            <FileSpreadsheet className="h-6 w-6" />
-          </div>
-          <h3 className="text-lg font-bold text-stone-900">Importar cronograma desde xlsx</h3>
-          <p className="text-sm text-stone-500 mt-1 max-w-md mx-auto">
-            Subí un archivo con columnas <span className="font-mono text-2xs bg-stone-100 px-1.5 py-0.5 rounded">MES 0</span>, <span className="font-mono text-2xs bg-stone-100 px-1.5 py-0.5 rounded">MES 1</span>... que contenga el % de avance de cada tarea por mes.
-          </p>
-        </div>
-        <label className="block">
-          <div className="border-2 border-dashed border-stone-300 rounded-2xl p-10 text-center cursor-pointer hover:border-brand-400 hover:bg-brand-50/30 transition-colors">
-            <Upload className="h-8 w-8 text-stone-400 mx-auto mb-3" />
-            <p className="text-sm font-semibold text-stone-700 mb-1">
-              {parsing ? "Procesando…" : "Hacé clic o arrastrá el archivo"}
-            </p>
-            <p className="text-xs text-stone-500">Excel (.xlsx)</p>
-            <input
-              type="file"
-              accept=".xlsx"
-              className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) { setFile(f); parse(f); }
-              }}
-              disabled={parsing}
-            />
-          </div>
-        </label>
-        {error && (
-          <div className="mt-4 flex items-start gap-2 p-3 bg-danger-50 border border-danger-100 rounded-lg text-danger-700">
-            <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-            <p className="text-xs">{error}</p>
-          </div>
-        )}
-        <div className="flex justify-end gap-2 mt-6">
-          <Button variant="outline" onClick={onCancel}>Cancelar</Button>
-        </div>
-      </Card>
-    );
-  }
-
-  return (
-    <div className="space-y-5">
-      <div className="bg-gradient-to-br from-brand-700 to-brand-900 text-white rounded-2xl p-5 shadow-sm">
-        <div className="flex items-start justify-between flex-wrap gap-4">
-          <div>
-            <p className="text-2xs uppercase tracking-wider text-brand-200 mb-1">Archivo · hoja "{preview.hojaUsada}"</p>
-            <p className="text-base font-bold truncate">{file?.name}</p>
-            {preview.obraDetectada && (
-              <p className="text-xs text-brand-200 mt-1">Obra detectada: <span className="font-semibold text-white">{preview.obraDetectada.nombre}</span></p>
-            )}
-          </div>
-          <div className="grid grid-cols-3 gap-5 text-center">
-            <HeroStat label="Meses" value={String(preview.cronogramaMeses.length)} />
-            <HeroStat label="Tareas con %" value={String(conCronograma)} />
-            <HeroStat label="Rubros" value={String(preview.totales.rubrosCount)} />
-          </div>
-        </div>
-      </div>
-
-      <Card className="p-5 space-y-4">
-        <div>
-          <Label>Obra *</Label>
-          <Select value={obraId} onValueChange={setObraId}>
-            <SelectTrigger>
-              <SelectValue placeholder="— Seleccionar —" />
-            </SelectTrigger>
-            <SelectContent>
-              {obras.map((o) => (
-                <SelectItem key={o.id} value={o.id}>{o.codigo} · {o.nombre}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div>
-          <Label>Nombre de la planificación</Label>
-          <Input value={nombre} onChange={(e) => setNombre(e.target.value)} />
-        </div>
-
-        <div className="grid grid-cols-2 gap-4 text-xs">
-          <div className="bg-stone-50 p-3 rounded-lg">
-            <p className="text-stone-500 mb-0.5">Fecha de inicio (auto)</p>
-            <p className="font-semibold text-stone-800">{new Date(fechaInicio).toLocaleDateString("es-AR", { month: "short", year: "numeric" })}</p>
-          </div>
-          <div className="bg-stone-50 p-3 rounded-lg">
-            <p className="text-stone-500 mb-0.5">Duración (auto)</p>
-            <p className="font-semibold text-stone-800">{duracionMeses} meses</p>
-          </div>
-        </div>
-
-        {sinCronograma > 0 && (
-          <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-100 rounded-lg">
-            <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
-            <p className="text-xs text-amber-800">
-              {sinCronograma} tarea{sinCronograma !== 1 ? "s" : ""} sin cronograma serán omitidas.
-            </p>
-          </div>
-        )}
-      </Card>
-
-      {/* Tabla preview con primeras 15 filas */}
-      <Card className="overflow-hidden">
-        <div className="px-4 py-3 bg-stone-50 border-b border-stone-200">
-          <p className="text-sm font-semibold text-stone-700">Vista previa</p>
-          <p className="text-xs text-stone-500">Primeras 15 tareas con cronograma</p>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead className="bg-white border-b border-stone-100">
-              <tr>
-                <th className="text-left px-3 py-2 text-stone-500 font-medium">Item</th>
-                <th className="text-left px-3 py-2 text-stone-500 font-medium">Descripción</th>
-                {preview.cronogramaMeses.slice(0, 8).map((m) => (
-                  <th key={m.mesOrdinal} className="text-center px-2 py-2 text-stone-500 font-medium">{m.etiqueta}</th>
-                ))}
-                {preview.cronogramaMeses.length > 8 && <th className="text-stone-400 px-2">+{preview.cronogramaMeses.length - 8}</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {preview.lineas.filter((l) => !l.isRubroRow && (l.cronograma?.some((p) => p > 0) ?? false)).slice(0, 15).map((l, i) => (
-                <tr key={i} className="border-b border-stone-50 hover:bg-stone-50/40">
-                  <td className="px-3 py-1.5 font-mono text-stone-500">{l.itemNumero}</td>
-                  <td className="px-3 py-1.5 text-stone-800 truncate max-w-[280px]">{l.descripcion}</td>
-                  {preview.cronogramaMeses.slice(0, 8).map((m) => {
-                    const v = (l.cronograma?.[m.mesOrdinal] ?? 0) * 100;
-                    return (
-                      <td key={m.mesOrdinal} className="px-2 py-1.5 text-center">
-                        {v > 0 ? <span className="text-brand-700 font-semibold">{v.toFixed(0)}%</span> : <span className="text-stone-300">—</span>}
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-
-      <div className="flex justify-between items-center">
-        <Button variant="outline" onClick={() => { setPreview(null); setFile(null); setError(null); }}>
-          <ArrowLeft /> Subir otro archivo
-        </Button>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={onCancel}>Cancelar</Button>
-          <Button onClick={importar} disabled={saving || !obraId}>
-            {saving ? "Importando…" : `Importar ${conCronograma} tareas`}
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function HeroStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="text-2xl font-black stat-number">{value}</p>
-      <p className="text-2xs uppercase tracking-wider text-brand-200">{label}</p>
-    </div>
-  );
-}
-
-// ────────────────────────────────────────────────────────────────────────────────
 function PlanificacionMatriz({
   obraNombre, obraCodigo, nombre, setNombre, fechaInicio, duracionMeses,
   filas, setFilas, onSave, saving, onBack,
@@ -595,7 +306,6 @@ function PlanificacionMatriz({
   saving: boolean;
   onBack: () => void;
 }) {
-  // Meses como labels
   const meses = useMemo(() => {
     const inicio = new Date(fechaInicio);
     return Array.from({ length: duracionMeses }, (_, i) => {
@@ -628,8 +338,7 @@ function PlanificacionMatriz({
   const distribuirUniforme = (filaIdx: number) => {
     setFilas((arr) => arr.map((f, i) => {
       if (i !== filaIdx) return f;
-      const pct = new Array(duracionMeses).fill(1 / duracionMeses);
-      return { ...f, pctPorMes: pct };
+      return { ...f, pctPorMes: new Array(duracionMeses).fill(1 / duracionMeses) };
     }));
   };
 

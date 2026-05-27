@@ -1,10 +1,7 @@
 import { Router, Request, Response } from "express";
-import multer from "multer";
 import prisma from "../prisma/client";
-import { parsePresupuestoXlsx } from "../services/presupuesto-parser.service";
 
 const router = Router();
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
 type FilaInput = {
   lineaId?: string | null;
@@ -15,80 +12,6 @@ type FilaInput = {
   cantidad: number;
   pctPorMes: number[];
 };
-
-// ─── PARSE XLSX (preview cronograma) ─────────────────────────────────────────
-// POST /api/planificacion/parse-xlsx — multipart file
-// Reusa el parser de presupuesto-aprobado (que ya detecta MES 0..N).
-// Devuelve obra detectada + matriz de filas con pct por mes.
-router.post("/parse-xlsx", upload.single("file"), async (req: Request, res: Response) => {
-  try {
-    if (!req.file) {
-      res.status(400).json({ error: "No se recibió ningún archivo" });
-      return;
-    }
-    const preview = await parsePresupuestoXlsx(req.file.buffer, { tipo: "APROBADO" });
-    if (preview.cronogramaMeses.length === 0) {
-      res.status(422).json({
-        error: "El archivo no contiene un cronograma mes a mes (columnas MES 0, MES 1, ...)",
-        preview,
-      });
-      return;
-    }
-    res.json(preview);
-  } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : "Error al parsear archivo" });
-  }
-});
-
-// ─── CREAR DESDE XLSX PARSEADO ───────────────────────────────────────────────
-// POST /api/planificacion/from-xlsx
-// Body: { obraId, nombre, fechaInicio, duracionMeses, filas: [{ itemNumero, rubro, descripcion, cantidad, pctPorMes }] }
-router.post("/from-xlsx", async (req: Request, res: Response) => {
-  try {
-    const { obraId, nombre, fechaInicio, duracionMeses, filas } = req.body as {
-      obraId: string;
-      nombre: string;
-      fechaInicio: string;
-      duracionMeses: number;
-      filas: Array<{
-        itemNumero?: string | null;
-        rubro: string;
-        descripcion: string;
-        cantidad: number;
-        pctPorMes: number[];
-      }>;
-    };
-    if (!obraId || !nombre || !fechaInicio || !duracionMeses || !Array.isArray(filas)) {
-      res.status(400).json({ error: "Faltan campos requeridos" });
-      return;
-    }
-
-    const plan = await prisma.planificacion.create({
-      data: { obraId, nombre, fechaInicio: new Date(fechaInicio), duracionMeses },
-    });
-
-    if (filas.length > 0) {
-      await prisma.planificacionFila.createMany({
-        data: filas.map((f) => ({
-          planificacionId: plan.id,
-          itemNumero: f.itemNumero ?? null,
-          rubro: f.rubro,
-          descripcion: f.descripcion,
-          cantidad: f.cantidad,
-          pctPorMes: f.pctPorMes,
-        })),
-      });
-    }
-
-    const full = await prisma.planificacion.findUnique({
-      where: { id: plan.id },
-      include: { obra: true, filas: true },
-    });
-    res.status(201).json(full);
-  } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : "Error al crear planificación" });
-  }
-});
 
 // ─── LISTA ───────────────────────────────────────────────────────────────────
 router.get("/", async (_req: Request, res: Response) => {
