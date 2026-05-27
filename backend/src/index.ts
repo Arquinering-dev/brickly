@@ -6,6 +6,7 @@ import obrasRoutes from "./routes/obras.routes";
 import presupuestosRoutes from "./routes/presupuestos.routes";
 import planificacionRoutes from "./routes/planificacion.routes";
 import dashboardRoutes from "./routes/dashboard.routes";
+import importRoutes from "./routes/import.routes";
 import authRoutes from "./routes/auth.routes";
 import { requireAuth } from "./middleware/auth.middleware";
 import prisma from "./prisma/client";
@@ -15,16 +16,32 @@ const PORT = process.env.PORT || 3000;
 
 const allowedOrigins = (process.env.CORS_ORIGIN || "http://localhost:5173")
   .split(",")
-  .map((s) => s.trim());
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+const isDev = process.env.NODE_ENV !== "production";
+
+// En dev Vite puede servir en 5173, 5174… y el browser puede usar localhost o 127.0.0.1.
+function isLocalDevOrigin(origin: string): boolean {
+  return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+}
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (!origin) {
         callback(null, true);
-      } else {
-        callback(new Error("Not allowed by CORS"));
+        return;
       }
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+      if (isDev && isLocalDevOrigin(origin)) {
+        callback(null, true);
+        return;
+      }
+      callback(null, false);
     },
   })
 );
@@ -47,6 +64,7 @@ app.use("/api/obras", requireAuth, obrasRoutes);
 app.use("/api/presupuestos", requireAuth, presupuestosRoutes);
 app.use("/api/planificacion", requireAuth, planificacionRoutes);
 app.use("/api/dashboard", requireAuth, dashboardRoutes);
+app.use("/api/import", requireAuth, importRoutes);
 
 app.listen(PORT, () => {
   console.log(`Groundwork backend corriendo en http://localhost:${PORT}`);
