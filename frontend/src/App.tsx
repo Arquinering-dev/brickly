@@ -12,6 +12,7 @@ import PartidaDetailPage from "./pages/PartidaDetailPage";
 import CatalogosPage from "./pages/CatalogosPage";
 import PresupuestoPage from "./pages/PresupuestoPage";
 import PlanificacionPage from "./pages/PlanificacionPage";
+import ImportPage from "./pages/ImportPage";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { token } = useAuth();
@@ -41,6 +42,7 @@ function Layout() {
           <Route path="/catalogo/planificaciones" element={<PlanificacionPage />} />
           <Route path="/catalogo/planificaciones/nueva" element={<PlanificacionPage />} />
           <Route path="/catalogo/planificaciones/:id" element={<PlanificacionPage />} />
+          <Route path="/catalogo/importar" element={<ImportPage />} />
 
           {/* Aliases legacy */}
           <Route path="/partidas" element={<Navigate to="/catalogo/partidas" replace />} />

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, Building2, Calendar, Calculator, Package, LogOut,
-  ChevronDown, FileText,
+  ChevronDown, FileText, Upload,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { cn } from "../lib/cn";
@@ -104,6 +104,7 @@ export function Sidebar() {
           <NavItem to="/catalogo/insumos" icon={Package} label="Insumos" />
           <NavItem to="/catalogo/presupuestos" icon={Calculator} label="Presupuestos" />
           <NavItem to="/catalogo/planificaciones" icon={Calendar} label="Planificaciones" />
+          <NavItem to="/catalogo/importar" icon={Upload} label="Importar APU" />
         </NavGroup>
       </nav>
 
