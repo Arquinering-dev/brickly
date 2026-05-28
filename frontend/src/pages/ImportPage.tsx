@@ -1,9 +1,10 @@
 import { useCallback, useState } from "react";
 import { useDropzone } from "react-dropzone";
+import { useNavigate } from "react-router-dom";
 import {
   Upload, FileSpreadsheet, CheckCircle2, AlertTriangle,
   XCircle, Loader2, Package, HardHat, Wrench, Building2,
-  Layers, RefreshCw, ArrowRight,
+  Layers, RefreshCw, ArrowRight, Calculator,
 } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "../lib/api";
@@ -13,6 +14,17 @@ import { Badge } from "../components/ui/badge";
 import { cn } from "../lib/cn";
 
 /* ─── Tipos ─────────────────────────────────────────────────────────────────── */
+
+interface PptoPreview {
+  titulo: string;
+  obraNombre: string;
+  obraCodigo: string;
+  mesCac: string;
+  coefGGBB: number;
+  lineas: number;
+  costoDirectoTotal: number;
+  precioVentaTotal: number;
+}
 
 interface ImportResult {
   insumos: {
@@ -24,6 +36,9 @@ interface ImportResult {
   };
   partidas: number;
   composiciones: number;
+  presupuesto: PptoPreview | null;
+  obraId?: string;
+  presupuestoHeaderId?: string;
   warnings: string[];
   errors: string[];
   dryRun: boolean;
@@ -60,7 +75,11 @@ function StatRow({
 
 /* ─── Página ─────────────────────────────────────────────────────────────────── */
 
+const fmtMoney = (n: number) =>
+  n.toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 });
+
 export default function ImportPage() {
+  const navigate = useNavigate();
   const [stage, setStage] = useState<Stage>("idle");
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<ImportResult | null>(null);
@@ -151,33 +170,58 @@ export default function ImportPage() {
                 <div>
                   <p className="font-semibold text-emerald-900 text-lg">Importación completada</p>
                   <p className="text-sm text-emerald-700 mt-0.5">
-                    El catálogo fue actualizado exitosamente.
+                    Catálogo actualizado y presupuesto generado.
                   </p>
                 </div>
+
+                {/* Obra y presupuesto creados */}
+                {importResult.presupuesto && (
+                  <div className="bg-white rounded-xl border border-emerald-100 p-4 space-y-2">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Building2 className="h-4 w-4 text-emerald-600" />
+                      <span className="text-sm font-semibold text-stone-800">
+                        Obra: {importResult.presupuesto.obraNombre}
+                      </span>
+                      <span className="text-xs text-stone-400 font-mono">({importResult.presupuesto.obraCodigo})</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <p className="text-stone-500">Costo directo total</p>
+                        <p className="font-bold text-stone-800 text-sm">{fmtMoney(importResult.presupuesto.costoDirectoTotal)}</p>
+                      </div>
+                      <div>
+                        <p className="text-stone-500">Líneas de presupuesto</p>
+                        <p className="font-bold text-stone-800 text-sm">{importResult.presupuesto.lineas}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-3 gap-3">
-                  <div className="bg-white rounded-lg p-3 border border-emerald-100 text-center">
-                    <p className="text-2xl font-bold text-stone-900 tabular-nums">
-                      {importResult.insumos.total.toLocaleString("es-AR")}
-                    </p>
-                    <p className="text-xs text-stone-500 mt-0.5">Insumos</p>
-                  </div>
-                  <div className="bg-white rounded-lg p-3 border border-emerald-100 text-center">
-                    <p className="text-2xl font-bold text-stone-900 tabular-nums">
-                      {importResult.partidas.toLocaleString("es-AR")}
-                    </p>
-                    <p className="text-xs text-stone-500 mt-0.5">Partidas APU</p>
-                  </div>
-                  <div className="bg-white rounded-lg p-3 border border-emerald-100 text-center">
-                    <p className="text-2xl font-bold text-stone-900 tabular-nums">
-                      {importResult.composiciones.toLocaleString("es-AR")}
-                    </p>
-                    <p className="text-xs text-stone-500 mt-0.5">Composiciones</p>
-                  </div>
+                  {[
+                    { label: "Insumos", value: importResult.insumos.total },
+                    { label: "Partidas APU", value: importResult.partidas },
+                    { label: "Composiciones", value: importResult.composiciones },
+                  ].map(({ label, value }) => (
+                    <div key={label} className="bg-white rounded-lg p-3 border border-emerald-100 text-center">
+                      <p className="text-2xl font-bold text-stone-900 tabular-nums">{value.toLocaleString("es-AR")}</p>
+                      <p className="text-xs text-stone-500 mt-0.5">{label}</p>
+                    </div>
+                  ))}
                 </div>
-                <Button variant="outline" size="sm" onClick={reset} className="gap-2">
-                  <RefreshCw className="h-4 w-4" />
-                  Importar otro archivo
-                </Button>
+
+                <div className="flex items-center gap-2 flex-wrap">
+                  {importResult.presupuestoHeaderId && (
+                    <Button size="sm" onClick={() => navigate(`/catalogo/presupuestos/${importResult.presupuestoHeaderId}`)} className="gap-2">
+                      <Calculator className="h-4 w-4" />
+                      Ver presupuesto
+                    </Button>
+                  )}
+                  <Button variant="outline" size="sm" onClick={reset} className="gap-2">
+                    <RefreshCw className="h-4 w-4" />
+                    Importar otro
+                  </Button>
+                </div>
               </div>
             </div>
           </CardContent>
@@ -323,11 +367,39 @@ export default function ImportPage() {
               </div>
             )}
 
+            {/* Presupuesto detectado */}
+            {preview.presupuesto && (
+              <div className="rounded-lg border border-brand-200 bg-brand-50 p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <Building2 className="h-4 w-4 text-brand-600" />
+                  <span className="text-sm font-semibold text-brand-900">Obra y presupuesto detectados</span>
+                </div>
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <p className="text-brand-700 font-medium">Obra</p>
+                    <p className="text-stone-800">{preview.presupuesto.obraNombre} <span className="text-stone-400 font-mono">({preview.presupuesto.obraCodigo})</span></p>
+                  </div>
+                  <div>
+                    <p className="text-brand-700 font-medium">Mes base CAC</p>
+                    <p className="text-stone-800">{preview.presupuesto.mesCac}</p>
+                  </div>
+                  <div>
+                    <p className="text-brand-700 font-medium">Costo directo total</p>
+                    <p className="text-stone-800 font-semibold">{fmtMoney(preview.presupuesto.costoDirectoTotal)}</p>
+                  </div>
+                  <div>
+                    <p className="text-brand-700 font-medium">Ítems de presupuesto</p>
+                    <p className="text-stone-800">{preview.presupuesto.lineas} líneas · coef GGBB ×{preview.presupuesto.coefGGBB}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* CTA */}
             {preview.errors.length === 0 && (
               <div className="flex justify-end pt-2">
                 <Button onClick={runImport} className="gap-2" size="lg">
-                  Importar al catálogo
+                  Importar catálogo + presupuesto
                   <ArrowRight className="h-4 w-4" />
                 </Button>
               </div>

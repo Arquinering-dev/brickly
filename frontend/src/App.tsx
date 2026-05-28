@@ -37,7 +37,6 @@ function Layout() {
           <Route path="/catalogo/partidas/:id" element={<PartidaDetailPage />} />
           <Route path="/catalogo/insumos" element={<CatalogosPage />} />
           <Route path="/catalogo/presupuestos" element={<PresupuestoPage />} />
-          <Route path="/catalogo/presupuestos/nuevo" element={<PresupuestoPage />} />
           <Route path="/catalogo/presupuestos/:id" element={<PresupuestoPage />} />
           <Route path="/catalogo/planificaciones" element={<PlanificacionPage />} />
           <Route path="/catalogo/planificaciones/nueva" element={<PlanificacionPage />} />
