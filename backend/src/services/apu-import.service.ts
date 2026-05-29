@@ -247,6 +247,83 @@ function parsePptoGenerador(rows: Row[]): { preview: PptoPreview; lineas: LineaP
   };
 }
 
+// ─── Bulk upsert helpers (evitan N round-trips a Supabase) ───────────────────
+
+/**
+ * INSERT INTO "Insumo" (...) VALUES (...), ... ON CONFLICT (codigo) DO UPDATE SET ...
+ * Procesado en chunks de 100 para no exceder límites de parámetros.
+ */
+async function bulkUpsertInsumos(insumos: InsumoData[]): Promise<void> {
+  if (insumos.length === 0) return;
+  const CHUNK = 100;
+  for (let i = 0; i < insumos.length; i += CHUNK) {
+    const chunk = insumos.slice(i, i + CHUNK);
+    // Build parameterized query
+    const placeholders = chunk.map((_, j) => {
+      const base = j * 9;
+      return `($${base+1}::text, $${base+2}::text, $${base+3}::"TipoInsumo", $${base+4}::text, $${base+5}::decimal, $${base+6}::text, $${base+7}::text, $${base+8}::text, $${base+9}::timestamp)`;
+    }).join(", ");
+    const params: unknown[] = [];
+    for (const ins of chunk) {
+      params.push(
+        ins.codigo, ins.descripcion, ins.tipo, ins.unidad,
+        ins.precioReferencia,
+        ins.proveedor ?? null, ins.categoria ?? null,
+        ins.codigoOriginal ?? null, ins.fechaCotizacion ?? null,
+      );
+    }
+    await prisma.$executeRawUnsafe(`
+      INSERT INTO "Insumo" (codigo, descripcion, tipo, unidad, "precioReferencia", proveedor, categoria, "codigoOriginal", "fechaCotizacion",
+                            embedding, "createdAt", "updatedAt", id)
+      VALUES ${chunk.map((_, j) => {
+        const b = j * 9;
+        return `($${b+1}::text, $${b+2}::text, $${b+3}::"TipoInsumo", $${b+4}::text, $${b+5}::decimal,
+                $${b+6}::text, $${b+7}::text, $${b+8}::text, $${b+9}::timestamp,
+                ARRAY[]::float8[], NOW(), NOW(), gen_random_uuid())`;
+      }).join(", ")}
+      ON CONFLICT (codigo) DO UPDATE SET
+        descripcion        = EXCLUDED.descripcion,
+        tipo               = EXCLUDED.tipo,
+        unidad             = EXCLUDED.unidad,
+        "precioReferencia" = EXCLUDED."precioReferencia",
+        proveedor          = EXCLUDED.proveedor,
+        categoria          = EXCLUDED.categoria,
+        "codigoOriginal"   = EXCLUDED."codigoOriginal",
+        "fechaCotizacion"  = EXCLUDED."fechaCotizacion",
+        "updatedAt"        = NOW()
+    `, ...params);
+  }
+}
+
+/**
+ * INSERT INTO "Partida" (...) VALUES (...), ... ON CONFLICT (codigo) DO UPDATE SET ...
+ */
+async function bulkUpsertPartidas(partidas: PartidaData[]): Promise<void> {
+  if (partidas.length === 0) return;
+  const CHUNK = 100;
+  for (let i = 0; i < partidas.length; i += CHUNK) {
+    const chunk = partidas.slice(i, i + CHUNK);
+    const params: unknown[] = [];
+    for (const p of chunk) {
+      params.push(p.codigo, p.descripcion, p.rubro, p.unidad, p.rendimiento);
+    }
+    await prisma.$executeRawUnsafe(`
+      INSERT INTO "Partida" (codigo, descripcion, rubro, unidad, rendimiento, tipo, scope, activa, "createdAt", "updatedAt", id)
+      VALUES ${chunk.map((_, j) => {
+        const b = j * 5;
+        return `($${b+1}::text, $${b+2}::text, $${b+3}::text, $${b+4}::text, $${b+5}::decimal,
+                'APU'::"TipoPartida", 'APU'::"ScopePartida", true, NOW(), NOW(), gen_random_uuid())`;
+      }).join(", ")}
+      ON CONFLICT (codigo) DO UPDATE SET
+        descripcion = EXCLUDED.descripcion,
+        rubro       = EXCLUDED.rubro,
+        unidad      = EXCLUDED.unidad,
+        rendimiento = EXCLUDED.rendimiento,
+        "updatedAt" = NOW()
+    `, ...params);
+  }
+}
+
 // ─── Función principal ────────────────────────────────────────────────────────
 
 export async function importApuXlsx(buf: Buffer, opts: { dryRun?: boolean } = {}): Promise<ApuImportResult> {
@@ -287,27 +364,15 @@ export async function importApuXlsx(buf: Buffer, opts: { dryRun?: boolean } = {}
 
   if (dryRun || errors.length > 0) return result;
 
-  // 2. Persistir catálogo ────────────────────────────────────────────────────
+  // 2. Persistir catálogo — bulk upsert via SQL nativo (evita N round-trips) ──
 
-  // 2a. Upsert insumos
-  for (const ins of allInsumos) {
-    await prisma.insumo.upsert({
-      where:  { codigo: ins.codigo },
-      create: { codigo: ins.codigo, descripcion: ins.descripcion, tipo: ins.tipo, unidad: ins.unidad, precioReferencia: ins.precioReferencia, proveedor: ins.proveedor ?? null, categoria: ins.categoria ?? null, codigoOriginal: ins.codigoOriginal ?? null, fechaCotizacion: ins.fechaCotizacion ?? null },
-      update: { descripcion: ins.descripcion, unidad: ins.unidad, precioReferencia: ins.precioReferencia, proveedor: ins.proveedor ?? null, categoria: ins.categoria ?? null, codigoOriginal: ins.codigoOriginal ?? null, fechaCotizacion: ins.fechaCotizacion ?? null },
-    });
-  }
+  // 2a. Bulk upsert insumos: una sola query INSERT ... ON CONFLICT DO UPDATE
+  await bulkUpsertInsumos(allInsumos);
 
-  // 2b. Upsert partidas
-  for (const p of partidas) {
-    await prisma.partida.upsert({
-      where:  { codigo: p.codigo },
-      create: { codigo: p.codigo, descripcion: p.descripcion, rubro: p.rubro, unidad: p.unidad, rendimiento: p.rendimiento, tipo: "APU", scope: "APU", activa: true },
-      update: { descripcion: p.descripcion, rubro: p.rubro, unidad: p.unidad, rendimiento: p.rendimiento },
-    });
-  }
+  // 2b. Bulk upsert partidas
+  await bulkUpsertPartidas(partidas);
 
-  // 2c. Composiciones: delete + recrear por partida en batches
+  // 2c. Composiciones: leer UUIDs, delete+recrear por partida
   const [insumoRows, partidaRows] = await Promise.all([
     prisma.insumo.findMany({ where: { codigo: { in: [...catalogCodes] } }, select: { id: true, codigo: true } }),
     prisma.partida.findMany({ where: { codigo: { in: [...partidaCodes] } }, select: { id: true, codigo: true } }),
@@ -315,28 +380,24 @@ export async function importApuXlsx(buf: Buffer, opts: { dryRun?: boolean } = {}
   const insumoIdMap  = new Map(insumoRows.map(r => [r.codigo, r.id]));
   const partidaIdMap = new Map(partidaRows.map(r => [r.codigo, r.id]));
 
-  const byPartida = new Map<string, ComposicionData[]>();
-  for (const c of composiciones) {
-    const arr = byPartida.get(c.partidaCodigo) ?? [];
-    arr.push(c);
-    byPartida.set(c.partidaCodigo, arr);
-  }
+  // Delete todas las composiciones de las partidas afectadas en una query
+  await prisma.composicion.deleteMany({
+    where: { partidaId: { in: [...partidaIdMap.values()] } },
+  });
 
-  const BATCH = 20;
-  const entries = [...byPartida.entries()];
-  for (let i = 0; i < entries.length; i += BATCH) {
-    const slice = entries.slice(i, i + BATCH);
-    await prisma.$transaction(slice.map(([cod]) => prisma.composicion.deleteMany({ where: { partidaId: partidaIdMap.get(cod)! } })));
-    for (const [cod, rows] of slice) {
-      const partidaId = partidaIdMap.get(cod);
-      if (!partidaId) continue;
-      const data = rows.map(c => {
-        const insumoId = insumoIdMap.get(c.insumoCodigo);
-        if (!insumoId) return null;
-        return { partidaId, insumoId, cantidadPorUnidad: c.cantidadPorUnidad, pctDesperdicio: c.pctDesperdicio, secuencia: c.secuencia };
-      }).filter(Boolean) as { partidaId: string; insumoId: string; cantidadPorUnidad: number; pctDesperdicio: number; secuencia: number }[];
-      if (data.length > 0) await prisma.composicion.createMany({ data });
-    }
+  // Insertar todas las composiciones en bloques de 500
+  const composicionData = composiciones
+    .map(c => {
+      const partidaId = partidaIdMap.get(c.partidaCodigo);
+      const insumoId  = insumoIdMap.get(c.insumoCodigo);
+      if (!partidaId || !insumoId) return null;
+      return { partidaId, insumoId, cantidadPorUnidad: c.cantidadPorUnidad, pctDesperdicio: c.pctDesperdicio, secuencia: c.secuencia };
+    })
+    .filter(Boolean) as { partidaId: string; insumoId: string; cantidadPorUnidad: number; pctDesperdicio: number; secuencia: number }[];
+
+  const COMP_BATCH = 500;
+  for (let i = 0; i < composicionData.length; i += COMP_BATCH) {
+    await prisma.composicion.createMany({ data: composicionData.slice(i, i + COMP_BATCH) });
   }
 
   // 3. Persistir Obra + Presupuesto ─────────────────────────────────────────
