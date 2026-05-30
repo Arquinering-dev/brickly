@@ -1,5 +1,8 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  // "native" para dev local (macOS); el target musl-openssl-3.0.x es para el runtime en
+  // node:20-alpine (Railway), que trae OpenSSL 3 — sin esto el schema engine no carga libssl.
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
 datasource db {

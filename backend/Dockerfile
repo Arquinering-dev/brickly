@@ -1,5 +1,8 @@
 FROM node:20-alpine AS builder
 
+# Prisma necesita OpenSSL para generar/correr sus engines en Alpine
+RUN apk add --no-cache openssl
+
 WORKDIR /app
 
 COPY package*.json ./
@@ -14,6 +17,9 @@ RUN npm run build
 
 # ─── Production image ───────────────────────────────────────────────────────
 FROM node:20-alpine AS runner
+
+# OpenSSL para el schema engine de Prisma (prisma migrate deploy en el arranque)
+RUN apk add --no-cache openssl
 
 WORKDIR /app
 
