@@ -90,12 +90,16 @@ export type ApuImportResult = {
   partidas: number;
   composiciones: number;
   presupuesto: PptoPreview | null;
+  aprobado?: { lineas: number; meses: number; cronogramaFilas: number };
   obraId?: string;
   presupuestoHeaderId?: string;
   warnings: string[];
   errors: string[];
   dryRun: boolean;
 };
+
+type AprobadoItem = { itemNumero: string; descripcion: string; unidad: string; cantidad: number; pvUnit: number; pctByYM: Record<string, number> };
+type AprobadoData = { meses: string[]; items: AprobadoItem[] };
 
 // ─── Parsers por hoja ─────────────────────────────────────────────────────────
 
@@ -247,6 +251,42 @@ function parsePptoGenerador(rows: Row[]): { preview: PptoPreview; lineas: LineaP
   };
 }
 
+/**
+ * PPTO_APROBADO (hoja agregada por scripts/inject-aprobado.ts):
+ *   Row 0: título
+ *   Row 1: meta (K en col 1)
+ *   Row 2: headers → col0 "#", col1 Descripción, col2 Ud, col3 Cant, col4 PV/ud, col5 PV total,
+ *          col 6+: meses en formato YYYY-MM
+ *   Rows 3+: por ítem → col0 item#, col4 precio venta unitario, col6+: % de ejecución (fracción) por mes
+ * Devuelve los meses (orden de columna = mesOrdinal) y los ítems con su % por mes calendario.
+ */
+function parsePptoAprobado(rows: Row[]): AprobadoData | null {
+  if (rows.length < 4) return null;
+  const header = rows[2] ?? [];
+  const mesCols: { col: number; ym: string }[] = [];
+  for (let c = 6; c < header.length; c++) {
+    const ym = toStr(header[c]);
+    if (/^\d{4}-\d{2}$/.test(ym)) mesCols.push({ col: c, ym });
+  }
+  if (mesCols.length === 0) return null;
+
+  const items: AprobadoItem[] = [];
+  for (let i = 3; i < rows.length; i++) {
+    const r = rows[i];
+    if (!r) continue;
+    const itemNumero = toStr(r[0]);
+    if (!/^\d+\.\d+$/.test(itemNumero)) continue;
+    const pvUnit = toNum(r[4]);
+    const pctByYM: Record<string, number> = {};
+    for (const m of mesCols) {
+      const p = toNum(r[m.col]); // almacenado como fracción (0.33)
+      if (p > 0) pctByYM[m.ym] = (pctByYM[m.ym] ?? 0) + p;
+    }
+    items.push({ itemNumero, descripcion: toStr(r[1]), unidad: toStr(r[2]) || "u", cantidad: toNum(r[3]), pvUnit, pctByYM });
+  }
+  return { meses: mesCols.map((m) => m.ym), items };
+}
+
 // ─── Bulk upsert helpers (evitan N round-trips a Supabase) ───────────────────
 
 /**
@@ -345,8 +385,9 @@ export async function importApuXlsx(buf: Buffer, opts: { dryRun?: boolean } = {}
     readSheet(wb, "COMPOSICIÓN"), catalogCodes, partidaCodes,
   );
 
-  // Presupuesto generador
+  // Presupuesto generador + aprobado (este último con precio de venta + cronograma)
   const pptoResult = parsePptoGenerador(readSheet(wb, "PPTO_GENERADOR"));
+  const aprobadoResult = parsePptoAprobado(readSheet(wb, "PPTO_APROBADO"));
 
   // Validaciones
   if (materiales.length === 0)    errors.push("Hoja MATERIALES vacía o no encontrada");
@@ -359,6 +400,11 @@ export async function importApuXlsx(buf: Buffer, opts: { dryRun?: boolean } = {}
     partidas: partidas.length,
     composiciones: composiciones.length,
     presupuesto: pptoResult?.preview ?? null,
+    aprobado: aprobadoResult ? {
+      lineas: aprobadoResult.items.length,
+      meses: aprobadoResult.meses.length,
+      cronogramaFilas: aprobadoResult.items.reduce((s, it) => s + Object.keys(it.pctByYM).length, 0),
+    } : undefined,
     warnings, errors, dryRun,
   };
 
@@ -455,6 +501,9 @@ export async function importApuXlsx(buf: Buffer, opts: { dryRun?: boolean } = {}
         matUd:                  l.matUd || null,
         moUd:                   l.moUd || null,
         eqUd:                   l.eqUd || null,
+        // El generador no tiene precio de venta UNITARIO confiable (col "Precio Venta" es un
+        // total de línea). Se deja null → el precio de venta se deriva como CD/ud × coefGGBB.
+        precioVenta:            null,
         fuente:                 l.fuente,
         apuLinkCodigo:          l.apuLinkCodigo,
         tipo:                   "APU",
@@ -463,6 +512,87 @@ export async function importApuXlsx(buf: Buffer, opts: { dryRun?: boolean } = {}
 
     result.obraId = obra.id;
     result.presupuestoHeaderId = header.id;
+
+    // 3d. Presupuesto APROBADO: espejo de las líneas del generador + precio de venta real
+    //     (del aprobado) + cronograma (LineaCronograma por mes). Es la fuente de verdad temporal.
+    if (aprobadoResult) {
+      const { meses, items } = aprobadoResult;
+      // Enriquecimiento desde el generador (costo/ud, MAT/MO/EQ, partida, rubro) por nº de ítem
+      const genByItem = new Map(lineas.map((l) => [l.itemNumero, l]));
+      const rubroByPrefix = new Map<string, string>();
+      for (const l of lineas) {
+        const pre = l.itemNumero.split(".")[0];
+        if (!rubroByPrefix.has(pre)) rubroByPrefix.set(pre, l.rubro);
+      }
+
+      // idempotente: borrar APROBADO previo (cascade borra sus LineaCronograma)
+      const exApr = await prisma.presupuestoHeader.findFirst({
+        where: { obraId: obra.id, tipo: "APROBADO" }, select: { id: true },
+      });
+      if (exApr) {
+        await prisma.lineaPresupuesto.deleteMany({ where: { presupuestoHeaderId: exApr.id } });
+        await prisma.presupuestoHeader.delete({ where: { id: exApr.id } });
+      }
+
+      const aprHeader = await prisma.presupuestoHeader.create({
+        data: {
+          obraId: obra.id, tipo: "APROBADO",
+          nombre: `${preview.obraNombre} — APROBADO`,
+          mesCac: preview.mesCac, cacValor: 0, coefGGBB: preview.coefGGBB,
+          fecha: new Date(),
+          fechaInicio: meses.length ? new Date(`${meses[0]}-01T00:00:00Z`) : null,
+        },
+      });
+
+      // Líneas APROBADO = guiadas por los ítems del aprobado (el presupuesto contractual),
+      // enriquecidas con costo/partida/rubro del generador. Así el total de venta es exacto e
+      // incluye ítems que el generador no tiene (provisiones, globales, etc.).
+      await prisma.lineaPresupuesto.createMany({
+        data: items.map((it, idx) => {
+          const gen = genByItem.get(it.itemNumero);
+          const partidaId = gen?.apuLinkCodigo ? (apuPartidaMap.get(gen.apuLinkCodigo) ?? null) : null;
+          const pre = it.itemNumero.split(".")[0];
+          return {
+            obraId: obra.id, presupuestoHeaderId: aprHeader.id,
+            partidaId,
+            descripcionLibre: partidaId ? null : it.descripcion,
+            cantidad: it.cantidad || 0,
+            precioUnitarioSnapshot: gen?.cdUd ?? 0,
+            rubro: gen?.rubro ?? rubroByPrefix.get(pre) ?? "GENERAL",
+            itemNumero: it.itemNumero,
+            orden: gen?.orden ?? (1000 + idx),
+            matUd: gen?.matUd || null, moUd: gen?.moUd || null, eqUd: gen?.eqUd || null,
+            precioVenta: it.pvUnit || null, // precio de venta UNITARIO aprobado
+            fuente: gen?.fuente ?? "APROBADO",
+            apuLinkCodigo: gen?.apuLinkCodigo ?? null,
+            tipo: "APU" as const,
+          };
+        }),
+      });
+
+      // Recuperar ids de las líneas recién creadas para colgar el cronograma
+      const aprLineas = await prisma.lineaPresupuesto.findMany({
+        where: { presupuestoHeaderId: aprHeader.id }, select: { id: true, itemNumero: true },
+      });
+      const lineIdByItem = new Map(aprLineas.map((l) => [l.itemNumero, l.id]));
+
+      const cronoData = [];
+      for (const it of items) {
+        const lineaId = lineIdByItem.get(it.itemNumero);
+        if (!lineaId) continue; // ítem del aprobado sin línea (ej "no cotiza")
+        for (const [ym, frac] of Object.entries(it.pctByYM)) {
+          const mesOrdinal = meses.indexOf(ym);
+          if (mesOrdinal < 0) continue;
+          cronoData.push({ lineaId, mesOrdinal, fecha: new Date(`${ym}-01T00:00:00Z`), pctEjecucion: frac });
+        }
+      }
+      const CR_BATCH = 500;
+      for (let i = 0; i < cronoData.length; i += CR_BATCH) {
+        await prisma.lineaCronograma.createMany({ data: cronoData.slice(i, i + CR_BATCH), skipDuplicates: true });
+      }
+
+      result.aprobado = { lineas: aprLineas.length, meses: meses.length, cronogramaFilas: cronoData.length };
+    }
   }
 
   return result;

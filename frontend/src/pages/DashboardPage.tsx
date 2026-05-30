@@ -103,9 +103,9 @@ export default function DashboardPage() {
           icon={TrendingUp}
         />
         <StatCard
-          label="Avance promedio"
+          label="Avance previsto"
           value={fmtPct(data.kpis.pctAvancePromedio)}
-          hint={`Sobre ${data.obras.length} obras`}
+          hint={`Planificado · ${data.obras.length} obras`}
           icon={Activity}
         />
       </div>
@@ -261,7 +261,7 @@ function ObraCard({ obra, onClick }: { obra: ObraResumen; onClick: () => void })
       {obra.tieneCronograma && (
         <div className="mb-3">
           <div className="flex items-center justify-between text-xs mb-1.5">
-            <span className="text-stone-500">Avance</span>
+            <span className="text-stone-500">Avance previsto</span>
             <span className="font-bold text-stone-900">{fmtPct(obra.pctAvance)}</span>
           </div>
           <Progress value={obra.pctAvance * 100} />

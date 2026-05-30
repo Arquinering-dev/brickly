@@ -1,29 +1,9 @@
 import { Router, Request, Response } from "express";
 import prisma from "../prisma/client";
+import { precioVentaUnitario } from "../lib/pricing";
+import { calcCantInsumo } from "../lib/composicion";
 
 const router = Router();
-
-// Multiplicador fijo para precio de venta (GG+GS+Utilidad).
-// No se parsea del Excel — siempre se aplica este factor sobre el costo directo.
-const MARKUP_FACTOR = 1.3327;
-
-// Cantidad consumida del insumo para una línea de presupuesto.
-// MO/EQ: días = (cantPorUd / rendimiento) × cantLínea  — rendimiento viene de PARTIDAS (unidades de partida / día).
-// MAT/SUB: cantPorUd × (1+pctDesp) × cantLínea
-function calcCantInsumo(
-  tipoInsumo: string,
-  cantidadPorUnidad: number,
-  pctDesperdicio: number,
-  rendimiento: number | null | undefined,
-  cantLinea: number
-): number {
-  if (tipoInsumo === "MANO_DE_OBRA" || tipoInsumo === "EQUIPO") {
-    const rend = Number(rendimiento) || 0;
-    if (rend > 0) return (cantidadPorUnidad / rend) * cantLinea;
-    return cantidadPorUnidad * cantLinea;
-  }
-  return cantidadPorUnidad * (1 + pctDesperdicio) * cantLinea;
-}
 
 router.get("/", async (_req: Request, res: Response) => {
   try {
@@ -96,18 +76,18 @@ router.get("/presupuestos/resumen", async (_req: Request, res: Response) => {
         // total CD = sum(precioUnitarioSnapshot * cantidad)
         const lineas = await prisma.lineaPresupuesto.findMany({
           where: { obraId: obra.id, presupuestoHeaderId: header.id },
-          select: { precioUnitarioSnapshot: true, cantidad: true, rubro: true },
+          select: { precioUnitarioSnapshot: true, cantidad: true, rubro: true, precioVenta: true },
         });
 
         let totalGeneral = 0;
+        let totalPV = 0;
         const rubrosSet = new Set<string>();
         for (const l of lineas) {
-          totalGeneral += Number(l.precioUnitarioSnapshot) * Number(l.cantidad);
+          const cant = Number(l.cantidad);
+          totalGeneral += Number(l.precioUnitarioSnapshot) * cant;
+          totalPV += precioVentaUnitario(l.precioVenta, l.precioUnitarioSnapshot, header.coefGGBB) * cant;
           if (l.rubro) rubrosSet.add(l.rubro);
         }
-
-        // Precio de venta siempre = costo directo × MARKUP_FACTOR (no se lee del Excel)
-        const totalPV = totalGeneral * MARKUP_FACTOR;
 
         return {
           obraId: obra.id,
@@ -212,8 +192,8 @@ router.get("/:id/presupuesto", async (req: Request, res: Response) => {
       const cant = Number(linea.cantidad);
       const precioUnit = Number(linea.precioUnitarioSnapshot);
       const total = cant * precioUnit;
-      // Precio de venta siempre calculado — MARKUP_FACTOR aplicado sobre costo directo
-      const pv = total * MARKUP_FACTOR;
+      const pvUnit = precioVentaUnitario(linea.precioVenta, precioUnit, header?.coefGGBB);
+      const pv = pvUnit * cant;
 
       // Cálculo de costos por tipo: usa los valores almacenados si existen, sino calcula desde composición.
       let lineMat = 0;
@@ -288,7 +268,7 @@ router.get("/:id/presupuesto", async (req: Request, res: Response) => {
         moUd: linea.moUd !== null ? Number(linea.moUd) : null,
         eqUd: linea.eqUd !== null ? Number(linea.eqUd) : null,
         precioUnitario: precioUnit,
-        precioVenta: precioUnit * MARKUP_FACTOR,
+        precioVenta: pvUnit,
         total,
         matTotal: lineMat,
         moTotal: lineMO,
@@ -738,6 +718,8 @@ router.get("/:id/cronograma", async (req: Request, res: Response) => {
 
     let totalGlobal = 0;
     let avanceMontoGlobal = 0;
+    // Monto planificado por mes (suma de total × pct) → serie mensual / curva S real
+    const montoPorMes = new Map<number, number>();
 
     for (const linea of lineas) {
       const rubroNombre = linea.rubro || "GENERAL";
@@ -766,6 +748,7 @@ router.get("/:id/cronograma", async (req: Request, res: Response) => {
         if (mesSeleccionado && c.fecha.getTime() === mesSeleccionado.fecha.getTime()) {
           pctEsteMes = pct;
         }
+        montoPorMes.set(c.mesOrdinal, (montoPorMes.get(c.mesOrdinal) ?? 0) + total * pct);
       }
 
       ru.avanceMonto += total * Math.min(1, pctAvance);
@@ -849,9 +832,23 @@ router.get("/:id/cronograma", async (req: Request, res: Response) => {
         return b.cantidad - a.cantidad;
       });
 
+    // Serie mensual real (curva S): % del mes y % acumulado, derivados del cronograma
+    let acumSerie = 0;
+    const serieMensual = mesesOrdenados.map((m) => {
+      const monto = montoPorMes.get(m.mesOrdinal) ?? 0;
+      acumSerie += monto;
+      return {
+        mesOrdinal: m.mesOrdinal,
+        fecha: m.fecha,
+        pctMes: totalGlobal > 0 ? monto / totalGlobal : 0,
+        pctAcumulado: totalGlobal > 0 ? acumSerie / totalGlobal : 0,
+      };
+    });
+
     res.json({
       obra,
       cronogramaCargado: true,
+      serieMensual,
       kpi: {
         totalGlobal,
         avanceMontoGlobal,
@@ -878,6 +875,108 @@ router.get("/:id/cronograma", async (req: Request, res: Response) => {
     res.status(500).json({
       error: err instanceof Error ? err.message : "Error al obtener cronograma",
     });
+  }
+});
+
+// ─── Cronograma editable ──────────────────────────────────────────────────────
+// Header preferido para el cronograma: APROBADO (trae venta + cronograma); si no, el vigente.
+async function getCronogramaHeaderId(obraId: string): Promise<string | null> {
+  const apr = await prisma.presupuestoHeader.findFirst({
+    where: { obraId, estado: "vigente", tipo: "APROBADO" }, orderBy: { createdAt: "desc" }, select: { id: true },
+  });
+  if (apr) return apr.id;
+  const vig = await prisma.presupuestoHeader.findFirst({
+    where: { obraId, estado: "vigente" }, orderBy: { createdAt: "desc" }, select: { id: true },
+  });
+  return vig?.id ?? null;
+}
+
+// GET /api/obras/:id/cronograma/matriz — matriz editable (tarea × mes, % de ejecución)
+router.get("/:id/cronograma/matriz", async (req: Request, res: Response) => {
+  try {
+    const obra = await prisma.obra.findUnique({ where: { id: req.params.id }, select: { id: true, nombre: true, codigo: true } });
+    if (!obra) { res.status(404).json({ error: "Obra no encontrada" }); return; }
+    const headerId = await getCronogramaHeaderId(obra.id);
+    if (!headerId) { res.json({ obra, headerId: null, meses: [], filas: [] }); return; }
+
+    const lineas = await prisma.lineaPresupuesto.findMany({
+      where: { presupuestoHeaderId: headerId },
+      include: { partida: { select: { descripcion: true } }, cronograma: { select: { fecha: true, pctEjecucion: true } } },
+      orderBy: { orden: "asc" },
+    });
+
+    const mesSet = new Map<string, Date>();
+    for (const l of lineas) for (const c of l.cronograma) {
+      const ym = c.fecha.toISOString().slice(0, 7);
+      if (!mesSet.has(ym)) mesSet.set(ym, c.fecha);
+    }
+    const meses = [...mesSet.entries()].sort(([a], [b]) => a.localeCompare(b))
+      .map(([ym, fecha]) => ({ ym, fecha: fecha.toISOString() }));
+
+    const filas = lineas.map((l) => {
+      const pctPorMes: Record<string, number> = {};
+      for (const c of l.cronograma) {
+        const ym = c.fecha.toISOString().slice(0, 7);
+        pctPorMes[ym] = (pctPorMes[ym] ?? 0) + Number(c.pctEjecucion);
+      }
+      return {
+        lineaId: l.id,
+        itemNumero: l.itemNumero,
+        rubro: l.rubro || "GENERAL",
+        descripcion: l.partida?.descripcion ?? l.descripcionLibre ?? "",
+        cantidad: Number(l.cantidad),
+        pctPorMes,
+      };
+    });
+
+    res.json({ obra, headerId, meses, filas });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Error al obtener matriz de cronograma" });
+  }
+});
+
+// PUT /api/obras/:id/cronograma — reemplaza el cronograma (LineaCronograma) del header vigente.
+// body: { filas: [{ lineaId, pctPorMes: { "YYYY-MM": fracción } }] }
+router.put("/:id/cronograma", async (req: Request, res: Response) => {
+  try {
+    const obra = await prisma.obra.findUnique({ where: { id: req.params.id }, select: { id: true } });
+    if (!obra) { res.status(404).json({ error: "Obra no encontrada" }); return; }
+    const headerId = await getCronogramaHeaderId(obra.id);
+    if (!headerId) { res.status(404).json({ error: "La obra no tiene presupuesto vigente" }); return; }
+
+    const filas = (req.body?.filas ?? []) as { lineaId: string; pctPorMes: Record<string, number> }[];
+    if (!Array.isArray(filas)) { res.status(400).json({ error: "filas debe ser un array" }); return; }
+
+    // Solo líneas del header vigente
+    const lineasHeader = await prisma.lineaPresupuesto.findMany({ where: { presupuestoHeaderId: headerId }, select: { id: true } });
+    const validIds = new Set(lineasHeader.map((l) => l.id));
+
+    // Meses (union) → ordinal estable
+    const mesSet = new Set<string>();
+    for (const f of filas) for (const [ym, p] of Object.entries(f.pctPorMes ?? {})) {
+      if (/^\d{4}-\d{2}$/.test(ym) && Number(p) > 0) mesSet.add(ym);
+    }
+    const meses = [...mesSet].sort();
+    const ordinalByYm = new Map(meses.map((ym, i) => [ym, i]));
+
+    const cronoData: { lineaId: string; mesOrdinal: number; fecha: Date; pctEjecucion: number }[] = [];
+    for (const f of filas) {
+      if (!validIds.has(f.lineaId)) continue;
+      for (const [ym, p] of Object.entries(f.pctPorMes ?? {})) {
+        const frac = Number(p);
+        if (!(frac > 0) || !ordinalByYm.has(ym)) continue;
+        cronoData.push({ lineaId: f.lineaId, mesOrdinal: ordinalByYm.get(ym)!, fecha: new Date(`${ym}-01T00:00:00Z`), pctEjecucion: frac });
+      }
+    }
+
+    await prisma.$transaction([
+      prisma.lineaCronograma.deleteMany({ where: { lineaId: { in: [...validIds] } } }),
+      prisma.lineaCronograma.createMany({ data: cronoData, skipDuplicates: true }),
+    ]);
+
+    res.json({ ok: true, filas: filas.length, cronogramaFilas: cronoData.length, meses: meses.length });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Error al guardar cronograma" });
   }
 });
 

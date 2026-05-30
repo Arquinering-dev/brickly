@@ -1,9 +1,8 @@
 import { Router, Request, Response } from "express";
 import prisma from "../prisma/client";
+import { precioVentaUnitario } from "../lib/pricing";
 
 const router = Router();
-
-const MARKUP_FACTOR = 1.3327;
 
 // GET /api/dashboard
 // Devuelve overview consolidado para la home:
@@ -66,10 +65,9 @@ router.get("/", async (_req: Request, res: Response) => {
       for (const l of lineas) {
         const cant = Number(l.cantidad);
         totalCD += cant * Number(l.precioUnitarioSnapshot);
-        totalPV += cant * Number(l.precioVenta ?? 0);
+        totalPV += cant * precioVentaUnitario(l.precioVenta, l.precioUnitarioSnapshot, header.coefGGBB);
         if (l.rubro) rubros.add(l.rubro);
       }
-      if (totalPV === 0) totalPV = totalCD * MARKUP_FACTOR;
 
       // Cronograma agregado
       const fechaSet = new Set<number>();
@@ -78,14 +76,14 @@ router.get("/", async (_req: Request, res: Response) => {
       for (const l of lineas) {
         const cant = Number(l.cantidad);
         const pu = Number(l.precioUnitarioSnapshot);
-        const pv = Number(l.precioVenta ?? pu * MARKUP_FACTOR);
+        const pvUnit = precioVentaUnitario(l.precioVenta, l.precioUnitarioSnapshot, header.coefGGBB);
         for (const c of l.cronograma) {
           fechaSet.add(c.fecha.getTime());
           const pct = Number(c.pctEjecucion);
           if (c.fecha.getTime() <= hoy.getTime()) avanceMonto += cant * pu * pct;
           // Cashflow por mes (precio venta)
           const t = c.fecha.getTime();
-          cashflowMap.set(t, (cashflowMap.get(t) ?? 0) + cant * pv * pct);
+          cashflowMap.set(t, (cashflowMap.get(t) ?? 0) + cant * pvUnit * pct);
         }
       }
       const fechasOrdenadas = [...fechaSet].sort((a, b) => a - b);

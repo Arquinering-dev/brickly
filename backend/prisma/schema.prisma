@@ -115,7 +115,6 @@ model Obra {
   presupuestos      PresupuestoHeader[]
   lineasPresupuesto LineaPresupuesto[]
   partidas          Partida[]
-  planificaciones   Planificacion[]
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 }
@@ -168,42 +167,6 @@ model LineaPresupuesto {
   partida                Partida?          @relation(fields: [partidaId], references: [id])
   createdAt              DateTime          @default(now())
   updatedAt              DateTime          @updatedAt
-}
-
-// Planificación = matriz partida × mes editable por el usuario.
-// Independiente del cronograma del presupuesto aprobado (LineaCronograma).
-// Una obra puede tener múltiples planificaciones (versiones).
-model Planificacion {
-  id          String                @id @default(uuid())
-  obraId      String
-  nombre      String
-  fechaInicio DateTime
-  duracionMeses Int
-  estado      String                @default("borrador")
-  obra        Obra                  @relation(fields: [obraId], references: [id])
-  filas       PlanificacionFila[]
-  createdAt   DateTime              @default(now())
-  updatedAt   DateTime              @updatedAt
-
-  @@index([obraId])
-}
-
-model PlanificacionFila {
-  id              String        @id @default(uuid())
-  planificacionId String
-  lineaId         String?       // ref a LineaPresupuesto (preferido)
-  partidaId       String?
-  itemNumero      String?
-  rubro           String
-  descripcion     String
-  cantidad        Decimal       @db.Decimal(14, 4)
-  // JSON array de longitud duracionMeses, valores en [0,1]; suma ~1.0
-  pctPorMes       Json          @default("[]")
-  planificacion   Planificacion @relation(fields: [planificacionId], references: [id], onDelete: Cascade)
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-
-  @@index([planificacionId])
 }
 
 // Distribución mensual de ejecución de una tarea según el cronograma aprobado.

@@ -11,7 +11,7 @@ import PartidasPage from "./pages/PartidasPage";
 import PartidaDetailPage from "./pages/PartidaDetailPage";
 import CatalogosPage from "./pages/CatalogosPage";
 import PresupuestoPage from "./pages/PresupuestoPage";
-import PlanificacionPage from "./pages/PlanificacionPage";
+import ProyeccionPage from "./pages/ProyeccionPage";
 import ImportPage from "./pages/ImportPage";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -30,6 +30,7 @@ function Layout() {
           <Route path="/obras" element={<ObrasListPage />} />
           <Route path="/obras/:id" element={<ObraDetailPage />} />
           <Route path="/obras/:id/:tab" element={<ObraDetailPage />} />
+          <Route path="/proyeccion" element={<ProyeccionPage />} />
 
           {/* Catálogo */}
           <Route path="/catalogo" element={<Navigate to="/catalogo/partidas" replace />} />
@@ -38,9 +39,6 @@ function Layout() {
           <Route path="/catalogo/insumos" element={<CatalogosPage />} />
           <Route path="/catalogo/presupuestos" element={<PresupuestoPage />} />
           <Route path="/catalogo/presupuestos/:id" element={<PresupuestoPage />} />
-          <Route path="/catalogo/planificaciones" element={<PlanificacionPage />} />
-          <Route path="/catalogo/planificaciones/nueva" element={<PlanificacionPage />} />
-          <Route path="/catalogo/planificaciones/:id" element={<PlanificacionPage />} />
           <Route path="/catalogo/importar" element={<ImportPage />} />
 
           {/* Aliases legacy */}
@@ -50,9 +48,6 @@ function Layout() {
           <Route path="/presupuesto" element={<Navigate to="/catalogo/presupuestos" replace />} />
           <Route path="/presupuesto/nuevo" element={<Navigate to="/catalogo/presupuestos/nuevo" replace />} />
           <Route path="/presupuesto/:id" element={<LegacyPpto />} />
-          <Route path="/planificacion" element={<Navigate to="/catalogo/planificaciones" replace />} />
-          <Route path="/planificacion/nueva" element={<Navigate to="/catalogo/planificaciones/nueva" replace />} />
-          <Route path="/planificacion/:id" element={<LegacyPlan />} />
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
@@ -68,10 +63,6 @@ function LegacyPartida() {
 }
 function LegacyPpto() {
   const path = window.location.pathname.replace("/presupuesto/", "/catalogo/presupuestos/");
-  return <Navigate to={path} replace />;
-}
-function LegacyPlan() {
-  const path = window.location.pathname.replace("/planificacion/", "/catalogo/planificaciones/");
   return <Navigate to={path} replace />;
 }
 

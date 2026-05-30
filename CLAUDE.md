@@ -189,16 +189,24 @@ El frontend en dev hace proxy de `/api/*` → `http://localhost:3000` (configura
 - **Prisma** para todo acceso a DB — sin queries SQL raw salvo casos especiales
 - **Upsert por código** al importar insumos y partidas (campo `codigo` es `@unique`)
 - Los precios en DB son `Decimal` con 2 decimales — no usar `float` para dinero
-- Embeddings de Gemini en `Insumo.embedding` (768 dims) para detección de duplicados semánticos
+- **Precio de venta y coeficiente GGBB (K):** usar siempre `backend/src/lib/pricing.ts`
+  (`precioVentaUnitario` / `coefGGBB`). NUNCA hardcodear el factor K — vive por presupuesto en
+  `PresupuestoHeader.coefGGBB` y, congelado, en `LineaPresupuesto.precioVenta`.
+- El campo `Insumo.embedding` existe en el schema pero está **sin uso** (ver Features de IA)
 - Fechas en ISO 8601, zona horaria del servidor
 
 ---
 
 ## Features de IA (Gemini)
 
-- **Embeddings semánticos** en insumos: detecta duplicados aunque tengan descripciones distintas
-- **LLM validation**: puede analizar partidas y composiciones antes de importar
-- Si `GEMINI_API_KEY` está vacío, el sistema funciona sin IA (features deshabilitadas gracefully)
+> **Estado real (2026-05-30): no hay IA viva en el backend.** El código de IA
+> (`services/ai/*`: embeddings, LLM, normalizers, endpoints de categorizar/deduplicar) fue
+> **eliminado** en la Fase 1 — no lo importaba nadie y el campo `embedding` se insertaba vacío.
+> Documentación histórica que mencione esas features está desactualizada.
+>
+> La IA se reincorporará donde aporte de verdad (ver `PRODUCT.md §IA`): principalmente el paso
+> **offline** de conversión de los Excel crudos de Arquinering → APU Unificado, no como infra
+> viva en runtime. No reintroducir Gemini en el backend sin una feature concreta que lo pida.
 
 ---
 
