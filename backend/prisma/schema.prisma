@@ -58,7 +58,12 @@ model Insumo {
   unidad              String
   precioReferencia    Decimal       @db.Decimal(18, 2)
   proveedor           String?
+  // Categoría cruda tal cual viene del Excel (col "Categoría"). Puede ser ruidosa o vacía.
   categoria           String?
+  // Categoría canónica asignada por el clasificador Gemini al importar (write-time, persistida).
+  // La vista de proyección agrupa por este campo: categoriaCanonica ?? categoria ?? "Sin categoría".
+  // El bulk-upsert del importador NO la pisa en re-imports, así que el trabajo de IA persiste.
+  categoriaCanonica   String?
   codigoOriginal      String?
   fechaCotizacion     DateTime?
   // Embedding semántico generado con Gemini text-embedding-004 (768 dims).

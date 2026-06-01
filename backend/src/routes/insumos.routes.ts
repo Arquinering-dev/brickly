@@ -1,6 +1,8 @@
 import { Router, Request, Response } from "express";
 import prisma from "../prisma/client";
 import { calcCantInsumo } from "../lib/composicion";
+import { categorizeInsumos, persistCategorias } from "../services/ai/categorizer";
+import { isGeminiConfigured } from "../services/ai/gemini.client";
 
 const VALID_TIPOS = new Set(["MATERIAL", "MANO_DE_OBRA", "EQUIPO", "SUBCONTRATO"]);
 type TipoInsumo = "MATERIAL" | "MANO_DE_OBRA" | "EQUIPO" | "SUBCONTRATO";
@@ -18,6 +20,9 @@ router.get("/proyeccion", async (req: Request, res: Response) => {
   try {
     const obraIdFilter = req.query.obraId as string | undefined;
     const tipoFilter = req.query.tipo as string | undefined;
+    // rubros: lista separada por "|" (los nombres pueden tener comas). Vacío = todos.
+    const rubrosParam = (req.query.rubros as string | undefined)?.trim();
+    const rubrosFilter = rubrosParam ? new Set(rubrosParam.split("|").map((r) => r.trim()).filter(Boolean)) : null;
 
     const allObras = await prisma.obra.findMany({
       orderBy: { createdAt: "desc" },
@@ -32,7 +37,9 @@ router.get("/proyeccion", async (req: Request, res: Response) => {
       tipo: string;
       unidad: string;
       categoria: string | null;
+      precioUnitario: number;
       porMes: Map<string, Celda>;
+      porRubro: Map<string, Celda>;
       totalCantidad: number;
       totalMonto: number;
     };
@@ -40,6 +47,7 @@ router.get("/proyeccion", async (req: Request, res: Response) => {
     const insumosMap = new Map<string, InsumoAgg>();
     const mesesMap = new Map<string, Date>();      // YYYY-MM → fecha representativa
     const totalMontoPorMes = new Map<string, number>();
+    const rubrosSet = new Set<string>();           // todos los rubros del alcance (para el filtro)
 
     // Qué obras tienen datos proyectables (línea con partida + cronograma) — sobre TODAS las
     // obras, independiente del filtro, para que los pills de selección no se deshabiliten mal.
@@ -76,6 +84,11 @@ router.get("/proyeccion", async (req: Request, res: Response) => {
       });
 
       for (const linea of lineas) {
+        const rubro = linea.rubro ?? "GENERAL";
+        rubrosSet.add(rubro);
+        // Filtro por rubro (se registra en rubrosSet antes de saltear para no perder la opción)
+        if (rubrosFilter && !rubrosFilter.has(rubro)) continue;
+
         const cant = Number(linea.cantidad);
         const cdLinea = cant * Number(linea.precioUnitarioSnapshot);
         cdTotal += cdLinea;
@@ -113,8 +126,10 @@ router.get("/proyeccion", async (req: Request, res: Response) => {
                 descripcion: comp.insumo.descripcion,
                 tipo: tipoIns,
                 unidad: comp.insumo.unidad,
-                categoria: comp.insumo.categoria ?? null,
+                categoria: comp.insumo.categoriaCanonica ?? comp.insumo.categoria ?? null,
+                precioUnitario: Number(comp.insumo.precioReferencia),
                 porMes: new Map(),
+                porRubro: new Map(),
                 totalCantidad: 0,
                 totalMonto: 0,
               };
@@ -124,6 +139,10 @@ router.get("/proyeccion", async (req: Request, res: Response) => {
             celda.cantidad += cantInsumo;
             celda.monto += monto;
             agg.porMes.set(mes, celda);
+            const celdaR = agg.porRubro.get(rubro) ?? { cantidad: 0, monto: 0 };
+            celdaR.cantidad += cantInsumo;
+            celdaR.monto += monto;
+            agg.porRubro.set(rubro, celdaR);
             agg.totalCantidad += cantInsumo;
             agg.totalMonto += monto;
 
@@ -149,7 +168,9 @@ router.get("/proyeccion", async (req: Request, res: Response) => {
         tipo: a.tipo,
         unidad: a.unidad,
         categoria: a.categoria,
+        precioUnitario: a.precioUnitario,
         porMes: Object.fromEntries(a.porMes),
+        porRubro: Object.fromEntries(a.porRubro),
         totalCantidad: a.totalCantidad,
         totalMonto: a.totalMonto,
       }))
@@ -160,10 +181,15 @@ router.get("/proyeccion", async (req: Request, res: Response) => {
         return b.totalMonto - a.totalMonto;
       });
 
+    const rubros = [...rubrosSet].sort((a, b) =>
+      a.localeCompare(b, "es", { numeric: true, sensitivity: "base" }),
+    );
+
     res.json({
       obras: allObras,
       obrasConDatos,
       meses,
+      rubros,
       insumos,
       totalMontoPorMes: Object.fromEntries(totalMontoPorMes),
       cobertura: {
@@ -171,10 +197,34 @@ router.get("/proyeccion", async (req: Request, res: Response) => {
         cdTotal,
         pct: cdTotal > 0 ? cdConComposicion / cdTotal : 0,
       },
-      filtros: { obraId: obraIdFilter ?? null, tipo: tipoFilter ?? null },
+      filtros: { obraId: obraIdFilter ?? null, tipo: tipoFilter ?? null, rubros: rubrosFilter ? [...rubrosFilter] : null },
     });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : "Error al obtener proyección" });
+  }
+});
+
+// POST /api/insumos/categorizar?todos=true
+// Backfill: asigna categoriaCanonica con Gemini a los insumos que no la tienen (o a todos si
+// ?todos=true). Write-time, persistido. No-op seguro si GEMINI_API_KEY no está configurada.
+router.post("/categorizar", async (req: Request, res: Response) => {
+  try {
+    if (!isGeminiConfigured()) {
+      return res.status(200).json({ configurada: false, candidatos: 0, categorizadas: 0 });
+    }
+    const todos = req.query.todos === "true";
+    const insumos = await prisma.insumo.findMany({
+      where: todos ? {} : { categoriaCanonica: null },
+      select: { codigo: true, descripcion: true, tipo: true, unidad: true, categoria: true },
+    });
+    if (insumos.length === 0) {
+      return res.json({ configurada: true, candidatos: 0, categorizadas: 0 });
+    }
+    const map = await categorizeInsumos(insumos);
+    const categorizadas = await persistCategorias(map);
+    res.json({ configurada: true, candidatos: insumos.length, categorizadas });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Error al categorizar" });
   }
 });
 

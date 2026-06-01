@@ -135,7 +135,8 @@ JWT_SECRET=            # Generar: python3 -c "import secrets; print(secrets.toke
 CORS_ORIGIN=           # URL del frontend en Vercel (ej: https://brickly.vercel.app)
 NODE_ENV=production
 PORT=3000
-GEMINI_API_KEY=        # Google AI Studio — opcional, habilita embeddings y validación IA
+GEMINI_API_KEY=        # Google AI Studio — opcional, habilita el clasificador de categorías de insumos
+GEMINI_MODEL=          # opcional, default gemini-2.0-flash
 ```
 
 ### Frontend (Vercel dashboard)
@@ -199,14 +200,24 @@ El frontend en dev hace proxy de `/api/*` → `http://localhost:3000` (configura
 
 ## Features de IA (Gemini)
 
-> **Estado real (2026-05-30): no hay IA viva en el backend.** El código de IA
-> (`services/ai/*`: embeddings, LLM, normalizers, endpoints de categorizar/deduplicar) fue
-> **eliminado** en la Fase 1 — no lo importaba nadie y el campo `embedding` se insertaba vacío.
-> Documentación histórica que mencione esas features está desactualizada.
+> **Estado (2026-05-31): IA viva acotada — clasificador de categorías de insumos.**
+> El único uso de IA en el backend es el **clasificador de categorías** (`services/ai/`:
+> `gemini.client.ts` + `categorizer.ts`). Corre en **write-time** (al importar una obra, y vía
+> backfill), nunca en el hot-path por request:
 >
-> La IA se reincorporará donde aporte de verdad (ver `PRODUCT.md §IA`): principalmente el paso
-> **offline** de conversión de los Excel crudos de Arquinering → APU Unificado, no como infra
-> viva en runtime. No reintroducir Gemini en el backend sin una feature concreta que lo pida.
+> - Al importar (`apu-import.service.ts`), después del upsert de insumos, Gemini lee
+>   descripción+tipo de cada insumo **sin `categoriaCanonica`** y le asigna una categoría canónica
+>   (Corralón, Acero, Eléctricos, UOCRA, etc.). Se persiste en `Insumo.categoriaCanonica` +
+>   `fuenteCategoria='ia'`. El bulk-upsert NO pisa `categoriaCanonica`, así que re-importar no
+>   recategoriza lo ya resuelto. Es **best-effort**: si Gemini falla o no hay key, el import sigue.
+> - Backfill / recategorizar: `POST /api/insumos/categorizar` (`?todos=true` para rehacer todo).
+> - La vista "Proyección de insumos" agrupa por `categoriaCanonica ?? categoria ?? "Sin categoría"`.
+>
+> Requiere `GEMINI_API_KEY` (Google AI Studio). Sin la key, todo funciona pero no se categoriza.
+> Modelo configurable con `GEMINI_MODEL` (default `gemini-2.0-flash`).
+>
+> El resto del código IA histórico (embeddings, LLM genérico, deduplicador) sigue **eliminado**.
+> No reintroducir Gemini en el hot-path por request: la IA va en write-time/offline.
 
 ---
 

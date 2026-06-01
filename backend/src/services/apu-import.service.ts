@@ -15,6 +15,8 @@
  */
 import * as XLSX from "xlsx";
 import prisma from "../prisma/client";
+import { categorizeAndPersist } from "./ai/categorizer";
+import { isGeminiConfigured } from "./ai/gemini.client";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -91,6 +93,7 @@ export type ApuImportResult = {
   composiciones: number;
   presupuesto: PptoPreview | null;
   aprobado?: { lineas: number; meses: number; cronogramaFilas: number };
+  categorizadas?: number;
   obraId?: string;
   presupuestoHeaderId?: string;
   warnings: string[];
@@ -414,6 +417,23 @@ export async function importApuXlsx(buf: Buffer, opts: { dryRun?: boolean } = {}
 
   // 2a. Bulk upsert insumos: una sola query INSERT ... ON CONFLICT DO UPDATE
   await bulkUpsertInsumos(allInsumos);
+
+  // 2a-bis. Categorización IA (best-effort, write-time): asignar categoriaCanonica a los insumos
+  // que todavía no la tienen. El upsert no pisa categoriaCanonica, así que solo categorizamos lo
+  // nuevo. Si GEMINI_API_KEY no está, es no-op y el import sigue normal.
+  if (isGeminiConfigured()) {
+    try {
+      const sinCategorizar = await prisma.insumo.findMany({
+        where: { codigo: { in: [...catalogCodes] }, categoriaCanonica: null },
+        select: { codigo: true, descripcion: true, tipo: true, unidad: true, categoria: true },
+      });
+      if (sinCategorizar.length > 0) {
+        result.categorizadas = await categorizeAndPersist(sinCategorizar);
+      }
+    } catch (err) {
+      warnings.push(`Categorización IA omitida: ${(err as Error).message}`);
+    }
+  }
 
   // 2b. Bulk upsert partidas
   await bulkUpsertPartidas(partidas);
