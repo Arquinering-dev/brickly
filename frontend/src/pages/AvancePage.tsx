@@ -139,6 +139,7 @@ function RubroCard({ rubro, obraId, onReported }: { rubro: Rubro; obraId: string
 }
 
 function TareaRow({ tarea, obraId, onReported }: { tarea: Tarea; obraId: string; onReported: () => void }) {
+  const [open, setOpen] = useState(false);
   const [modo, setModo] = useState<"pct" | "cant">("pct");
   const [valor, setValor] = useState("");
   const [saving, setSaving] = useState(false);
@@ -172,62 +173,71 @@ function TareaRow({ tarea, obraId, onReported }: { tarea: Tarea; obraId: string;
   }
 
   return (
-    <div className="px-4 py-3">
-      <div className="flex items-start gap-2">
-        <div className="flex-1 min-w-0">
-          <p className="text-sm text-stone-800">
-            {tarea.itemNumero && <span className="font-mono text-2xs text-stone-400 mr-1.5">{tarea.itemNumero}</span>}
-            {tarea.descripcion}
-          </p>
-          <p className="text-2xs text-stone-400 mt-0.5">
-            {fmtNum(tarea.cantidad)} {tarea.unidad}
-            {tarea.pctAcumulado > 0 && <> · ejecutado {fmtNum(tarea.cantidadEjecutada)} {tarea.unidad}</>}
-          </p>
-        </div>
-        <div className="text-right shrink-0">
-          <span className={`text-sm font-black tabular-nums ${completa ? "text-emerald-600" : "text-stone-700"}`}>
-            {(tarea.pctAcumulado * 100).toFixed(0)}%
-          </span>
-          {completa && <Check className="h-3.5 w-3.5 text-emerald-600 inline-block ml-1" />}
-        </div>
-      </div>
-      <div className="mt-1.5"><Bar pct={tarea.pctAcumulado} /></div>
-
-      {!completa && (
-        <div className="mt-2.5 flex items-center gap-2">
-          {/* Toggle %/cantidad */}
-          <div className="flex rounded-lg border border-stone-200 overflow-hidden text-2xs shrink-0">
-            <button
-              onClick={() => setModo("pct")}
-              className={`px-2.5 py-2 font-semibold ${modo === "pct" ? "bg-brand-600 text-white" : "bg-white text-stone-500"}`}
-            >%</button>
-            <button
-              onClick={() => tieneCantidad && setModo("cant")}
-              disabled={!tieneCantidad}
-              className={`px-2.5 py-2 font-semibold ${modo === "cant" ? "bg-brand-600 text-white" : "bg-white text-stone-500"} ${!tieneCantidad ? "opacity-40" : ""}`}
-            >cant.</button>
+    <div className={`px-4 py-3 ${open ? "bg-stone-50" : ""}`}>
+      {/* Fila tappable: abre/cierra el cargador de avance */}
+      <button onClick={() => setOpen((o) => !o)} className="w-full text-left active:opacity-70">
+        <div className="flex items-start gap-2">
+          <div className="flex-1 min-w-0">
+            <p className="text-sm text-stone-800">
+              {tarea.itemNumero && <span className="font-mono text-2xs text-stone-400 mr-1.5">{tarea.itemNumero}</span>}
+              {tarea.descripcion}
+            </p>
+            <p className="text-2xs text-stone-400 mt-0.5">
+              {fmtNum(tarea.cantidad)} {tarea.unidad}
+              {tarea.pctAcumulado > 0 && <> · ejecutado {fmtNum(tarea.cantidadEjecutada)} {tarea.unidad}</>}
+            </p>
           </div>
-          <input
-            type="number"
-            inputMode="decimal"
-            value={valor}
-            onChange={(e) => setValor(e.target.value)}
-            placeholder={modo === "pct" ? "+% de hoy" : `+${tarea.unidad} de hoy`}
-            className="flex-1 min-w-0 rounded-lg border border-stone-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-          />
-          <button
-            onClick={reportar}
-            disabled={saving || isNaN(num) || num <= 0}
-            className="shrink-0 rounded-lg bg-brand-600 text-white px-3.5 py-2 text-sm font-semibold disabled:opacity-40 active:bg-brand-700 flex items-center gap-1"
-          >
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Cargar"}
-          </button>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className={`text-sm font-black tabular-nums ${completa ? "text-emerald-600" : "text-stone-700"}`}>
+              {(tarea.pctAcumulado * 100).toFixed(0)}%
+            </span>
+            {completa
+              ? <Check className="h-4 w-4 text-emerald-600" />
+              : <ChevronDown className={`h-4 w-4 text-stone-300 transition-transform ${open ? "rotate-180" : ""}`} />}
+          </div>
         </div>
-      )}
-      {!completa && incrFrac > 0 && (
-        <p className="mt-1.5 text-2xs text-stone-500">
-          {(tarea.pctAcumulado * 100).toFixed(0)}% + {(incrFrac * 100).toFixed(0)}% = <span className="font-bold text-brand-700">{(totalPreview * 100).toFixed(0)}%</span>
-        </p>
+        <div className="mt-1.5"><Bar pct={tarea.pctAcumulado} /></div>
+      </button>
+
+      {/* Cargador: solo visible al tocar la tarea */}
+      {open && !completa && (
+        <div className="mt-3">
+          <div className="flex items-center gap-2">
+            {/* Toggle %/cantidad */}
+            <div className="flex rounded-lg border border-stone-200 overflow-hidden text-2xs shrink-0">
+              <button
+                onClick={() => setModo("pct")}
+                className={`px-2.5 py-2 font-semibold ${modo === "pct" ? "bg-brand-600 text-white" : "bg-white text-stone-500"}`}
+              >%</button>
+              <button
+                onClick={() => tieneCantidad && setModo("cant")}
+                disabled={!tieneCantidad}
+                className={`px-2.5 py-2 font-semibold ${modo === "cant" ? "bg-brand-600 text-white" : "bg-white text-stone-500"} ${!tieneCantidad ? "opacity-40" : ""}`}
+              >cant.</button>
+            </div>
+            <input
+              type="number"
+              inputMode="decimal"
+              autoFocus
+              value={valor}
+              onChange={(e) => setValor(e.target.value)}
+              placeholder={modo === "pct" ? "+% de hoy" : `+${tarea.unidad} de hoy`}
+              className="flex-1 min-w-0 rounded-lg border border-stone-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+            />
+            <button
+              onClick={reportar}
+              disabled={saving || isNaN(num) || num <= 0}
+              className="shrink-0 rounded-lg bg-brand-600 text-white px-3.5 py-2 text-sm font-semibold disabled:opacity-40 active:bg-brand-700 flex items-center gap-1"
+            >
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Cargar"}
+            </button>
+          </div>
+          {incrFrac > 0 && (
+            <p className="mt-1.5 text-2xs text-stone-500">
+              {(tarea.pctAcumulado * 100).toFixed(0)}% + {(incrFrac * 100).toFixed(0)}% = <span className="font-bold text-brand-700">{(totalPreview * 100).toFixed(0)}%</span>
+            </p>
+          )}
+        </div>
       )}
     </div>
   );
