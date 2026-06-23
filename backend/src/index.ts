@@ -9,6 +9,8 @@ import importRoutes from "./routes/import.routes";
 import authRoutes from "./routes/auth.routes";
 import { requireAuth } from "./middleware/auth.middleware";
 import prisma from "./prisma/client";
+import indicesRoutes from "./routes/indices.routes";
+import { ensureCurrentMonthICC } from "./services/indices/indec.client";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -63,9 +65,14 @@ app.use("/api/obras", requireAuth, obrasRoutes);
 app.use("/api/presupuestos", requireAuth, presupuestosRoutes);
 app.use("/api/dashboard", requireAuth, dashboardRoutes);
 app.use("/api/import", requireAuth, importRoutes);
+app.use("/api/indices", requireAuth, indicesRoutes);
 
 app.listen(PORT, () => {
   console.log(`Groundwork backend corriendo en http://localhost:${PORT}`);
+  // Trae el ICC del mes actual si no está en DB (best-effort, no bloquea el arranque).
+  ensureCurrentMonthICC().catch((e) =>
+    console.warn("[indec] chequeo startup falló:", e instanceof Error ? e.message : e)
+  );
 });
 
 export default app;

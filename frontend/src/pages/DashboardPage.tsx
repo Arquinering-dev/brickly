@@ -2,10 +2,11 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Building2, Calendar, TrendingUp, AlertTriangle, Activity,
-  Wallet, Layers, ChevronRight, Plus,
+  Wallet, Layers, ChevronRight, Plus, BarChart2, RefreshCw, Pencil, Check, X,
 } from "lucide-react";
 import { Area, AreaChart, ResponsiveContainer, Tooltip as ReTooltip, XAxis, YAxis, CartesianGrid } from "recharts";
 import { apiFetch } from "../lib/api";
+import { toast } from "sonner";
 import { fmtMoney, fmtPct, fmtDate } from "../lib/format";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/card";
 import { StatCard } from "../components/ui/stat-card";
@@ -35,6 +36,17 @@ interface ObraResumen {
   alertas: string[];
 }
 
+interface IndiceICC {
+  id: string;
+  mes: number;
+  anio: number;
+  variacionMensual: number | null;
+  variacionAnual: number | null;
+  valorAbsoluto: number | null;
+  fuente: string;
+  fetchedAt: string;
+}
+
 interface DashboardData {
   kpis: {
     obrasActivas: number;
@@ -54,12 +66,29 @@ export default function DashboardPage() {
   const navigate = useNavigate();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [icc, setIcc] = useState<IndiceICC[]>([]);
+  const [cacBase, setCacBase] = useState<{ valor: number; mes: string } | null>(null);
 
   useEffect(() => {
     apiFetch("/api/dashboard")
       .then((r) => r.json())
       .then((d: DashboardData) => { setData(d); setLoading(false); })
       .catch(() => setLoading(false));
+    apiFetch("/api/indices/icc")
+      .then((r) => r.json())
+      .then((d: { indices: IndiceICC[] }) => setIcc(d.indices ?? []))
+      .catch(() => {});
+    // Traer el cacValor del presupuesto más reciente para mostrar el coeficiente en el widget
+    apiFetch("/api/presupuestos")
+      .then((r) => r.json())
+      .then((list: Array<{ cacValor: number; mesCac: string; fecha: string }>) => {
+        const withBase = list.filter((p) => p.cacValor > 0);
+        if (withBase.length > 0) {
+          withBase.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+          setCacBase({ valor: withBase[0].cacValor, mes: withBase[0].mesCac });
+        }
+      })
+      .catch(() => {});
   }, []);
 
   if (loading) return <DashboardSkeleton />;
@@ -197,6 +226,9 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
+          {/* ICC INDEC */}
+          <ICCWidget indices={icc} cacBase={cacBase} />
+
           {/* Necesita atención */}
           <Card>
             <CardHeader>
@@ -303,6 +335,231 @@ function ObraCard({ obra, onClick }: { obra: ObraResumen; onClick: () => void })
         </div>
       )}
     </button>
+  );
+}
+
+const MESES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+
+function ICCWidget({ indices: initialIndices, cacBase }: { indices: IndiceICC[]; cacBase: { valor: number; mes: string } | null }) {
+  const [indices, setIndices] = useState<IndiceICC[]>(initialIndices);
+  const [fetching, setFetching] = useState(false);
+  const [editingAbsoluto, setEditingAbsoluto] = useState(false);
+  const [absolutoDraft, setAbsolutoDraft] = useState("");
+  const [savingAbsoluto, setSavingAbsoluto] = useState(false);
+
+  // Sync if parent refreshes the initial data (first load)
+  useEffect(() => { setIndices(initialIndices); }, [initialIndices]);
+
+  async function handleRefresh() {
+    setFetching(true);
+    const tid = toast.loading("Consultando INDEC…");
+    try {
+      const res = await apiFetch("/api/indices/icc/fetch", { method: "POST" });
+      const data = await res.json() as { ok?: boolean; indice?: IndiceICC; error?: string };
+      if (!res.ok || !data.ok) throw new Error(data.error ?? "Error al actualizar");
+      setIndices((prev) => {
+        const filtered = prev.filter((i) => !(i.mes === data.indice!.mes && i.anio === data.indice!.anio));
+        return [...filtered, data.indice!];
+      });
+      const { mes, anio, variacionMensual } = data.indice!;
+      const mesStr = MESES[mes - 1];
+      const varStr = variacionMensual !== null ? ` · +${variacionMensual.toFixed(1)}% mensual` : "";
+      toast.success(`ICC actualizado — ${mesStr} ${anio}${varStr}`, { id: tid });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Error desconocido";
+      toast.error(`No se pudo actualizar: ${msg}`, { id: tid });
+    } finally {
+      setFetching(false);
+    }
+  }
+
+  async function handleSaveAbsoluto() {
+    if (!latest) return;
+    const val = parseFloat(absolutoDraft.replace(/\./g, "").replace(",", "."));
+    if (isNaN(val) || val <= 0) {
+      toast.error("Valor inválido — ingresá el nivel ICC (ej: 16.000)");
+      return;
+    }
+    setSavingAbsoluto(true);
+    try {
+      const res = await apiFetch("/api/indices/icc/manual", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mes: latest.mes, anio: latest.anio, valorAbsoluto: val }),
+      });
+      const data = await res.json() as { ok?: boolean; indice?: IndiceICC; error?: string };
+      if (!res.ok || !data.ok) throw new Error(data.error ?? "Error al guardar");
+      setIndices((prev) => {
+        const filtered = prev.filter((i) => !(i.mes === data.indice!.mes && i.anio === data.indice!.anio));
+        return [...filtered, data.indice!];
+      });
+      setEditingAbsoluto(false);
+      setAbsolutoDraft("");
+      toast.success(`ICC absoluto guardado — ${MESES[latest.mes - 1]} ${latest.anio}: ${val.toLocaleString("es-AR")}`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Error al guardar");
+    } finally {
+      setSavingAbsoluto(false);
+    }
+  }
+
+  const sorted = [...indices].sort((a, b) => a.anio !== b.anio ? a.anio - b.anio : a.mes - b.mes);
+  const latest = sorted[sorted.length - 1];
+  const prev6 = sorted.slice(-6);
+  const coefICC = cacBase?.valor && latest?.valorAbsoluto
+    ? latest.valorAbsoluto / cacBase.valor
+    : null;
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <BarChart2 className="h-4 w-4 text-stone-400" />
+            <CardTitle>ICC · INDEC</CardTitle>
+          </div>
+          <div className="flex items-center gap-2">
+            {latest && <span className="text-2xs text-stone-400 font-medium">{MESES[latest.mes - 1]} {latest.anio}</span>}
+            <button
+              onClick={handleRefresh}
+              disabled={fetching}
+              title="Actualizar desde INDEC"
+              className="rounded-md p-1 text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition-colors disabled:opacity-40"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${fetching ? "animate-spin" : ""}`} />
+            </button>
+          </div>
+        </div>
+        <CardDescription>Índice del Costo de la Construcción</CardDescription>
+      </CardHeader>
+      <CardContent className="p-3 pt-1 space-y-3">
+        {!latest ? (
+          <div className="py-4 text-center space-y-2">
+            <p className="text-xs text-stone-400">Sin datos disponibles</p>
+            <button onClick={handleRefresh} disabled={fetching} className="text-xs text-brand-600 hover:underline disabled:opacity-40">
+              {fetching ? "Buscando…" : "Traer ahora"}
+            </button>
+          </div>
+        ) : (
+          <>
+            {/* Coeficiente acumulado desde presupuesto base */}
+            {coefICC !== null ? (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-2.5">
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-[10px] uppercase tracking-wider text-amber-700 font-semibold">Coeficiente desde {cacBase?.mes}</p>
+                  <span className="text-sm font-black text-amber-700">×{coefICC.toFixed(3)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] text-amber-600">
+                    ICC base: {cacBase!.valor.toLocaleString("es-AR")} → actual: {latest.valorAbsoluto!.toLocaleString("es-AR", { maximumFractionDigits: 0 })}
+                  </p>
+                  <button
+                    onClick={() => { setEditingAbsoluto(true); setAbsolutoDraft(String(latest.valorAbsoluto)); }}
+                    className="text-amber-500 hover:text-amber-700 ml-2 shrink-0"
+                    title="Editar valor absoluto"
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-stone-50 border border-stone-200 rounded-xl p-2.5">
+                {cacBase && !latest?.valorAbsoluto && (
+                  <p className="text-[10px] text-stone-500 mb-1.5">
+                    Coeficiente: falta el nivel ICC de {MESES[(latest?.mes ?? 1) - 1]} {latest?.anio}
+                  </p>
+                )}
+                {editingAbsoluto ? (
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="text"
+                      value={absolutoDraft}
+                      onChange={(e) => setAbsolutoDraft(e.target.value)}
+                      placeholder="Ej: 16000"
+                      className="flex-1 text-xs border border-stone-300 rounded px-2 py-1 focus:outline-none focus:border-amber-400"
+                      onKeyDown={(e) => { if (e.key === "Enter") handleSaveAbsoluto(); if (e.key === "Escape") setEditingAbsoluto(false); }}
+                      autoFocus
+                    />
+                    <button onClick={handleSaveAbsoluto} disabled={savingAbsoluto} className="text-emerald-600 hover:text-emerald-700 disabled:opacity-40">
+                      <Check className="h-3.5 w-3.5" />
+                    </button>
+                    <button onClick={() => setEditingAbsoluto(false)} className="text-stone-400 hover:text-stone-600">
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ) : latest?.valorAbsoluto ? (
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-[10px] text-stone-400">Nivel ICC {MESES[(latest.mes ?? 1) - 1]} {latest.anio}</p>
+                      <p className="text-sm font-bold text-stone-700">{latest.valorAbsoluto.toLocaleString("es-AR", { maximumFractionDigits: 0 })}</p>
+                    </div>
+                    <button
+                      onClick={() => { setEditingAbsoluto(true); setAbsolutoDraft(String(latest.valorAbsoluto)); }}
+                      className="text-stone-400 hover:text-stone-600"
+                      title="Editar valor absoluto"
+                    >
+                      <Pencil className="h-3 w-3" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setEditingAbsoluto(true)}
+                    className="text-xs text-amber-600 hover:text-amber-700 hover:underline flex items-center gap-1"
+                  >
+                    <Pencil className="h-3 w-3" /> Ingresar nivel ICC {MESES[(latest?.mes ?? 1) - 1]} {latest?.anio}
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Variación mensual */}
+            <div className="flex items-end gap-3">
+              <div>
+                <p className="text-2xs uppercase tracking-wider text-stone-400 mb-0.5">Var. mensual</p>
+                <p className={`text-2xl font-black ${latest.variacionMensual === null ? "text-stone-400" : latest.variacionMensual >= 0 ? "text-amber-600" : "text-emerald-600"}`}>
+                  {latest.variacionMensual !== null ? `${latest.variacionMensual >= 0 ? "+" : ""}${latest.variacionMensual.toFixed(1)}%` : "—"}
+                </p>
+              </div>
+              {latest.variacionAnual !== null && (
+                <div className="pb-0.5">
+                  <p className="text-2xs uppercase tracking-wider text-stone-400 mb-0.5">Interanual</p>
+                  <p className="text-sm font-bold text-stone-600">+{latest.variacionAnual.toFixed(1)}%</p>
+                </div>
+              )}
+            </div>
+
+            {/* Mini histograma últimos meses */}
+            {prev6.length > 1 && (
+              <div>
+                <p className="text-2xs text-stone-400 mb-1.5">Últimos {prev6.length} meses</p>
+                <div className="flex items-end gap-1 h-10">
+                  {prev6.map((idx) => {
+                    const v = idx.variacionMensual ?? 0;
+                    const maxV = Math.max(...prev6.map((x) => x.variacionMensual ?? 0));
+                    const pct = maxV > 0 ? (v / maxV) * 100 : 50;
+                    const isLatest = idx.mes === latest.mes && idx.anio === latest.anio;
+                    return (
+                      <div key={`${idx.mes}-${idx.anio}`} className="flex-1 flex flex-col items-center gap-0.5">
+                        <div
+                          className={`w-full rounded-sm transition-all ${isLatest ? "bg-amber-500" : "bg-stone-200"}`}
+                          style={{ height: `${Math.max(pct, 8)}%` }}
+                        />
+                        <span className="text-[9px] text-stone-400">{MESES[idx.mes - 1]}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <p className="text-[10px] text-stone-400 border-t border-stone-100 pt-2">
+              {latest.fuente === "argly" ? "INDEC vía Argly" : latest.fuente === "manual" ? "Ingresado manualmente" : "FTP INDEC"}
+              {" · "}actualizado {new Date(latest.fetchedAt).toLocaleDateString("es-AR", { day: "numeric", month: "short" })}
+            </p>
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

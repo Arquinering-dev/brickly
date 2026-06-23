@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import prisma from "../prisma/client";
 import { precioVentaUnitario } from "../lib/pricing";
 import { calcCantInsumo } from "../lib/composicion";
+import { getLatestIccRaw, calcCoefICC } from "../lib/icc";
 
 const router = Router();
 
@@ -302,6 +303,10 @@ router.get("/:id/presupuesto", async (req: Request, res: Response) => {
       });
     }
 
+    const cacValorNum = header ? Number(header.cacValor) : null;
+    const latestIcc = await getLatestIccRaw();
+    const coefICC = cacValorNum ? calcCoefICC(cacValorNum, latestIcc?.valorAbsoluto ?? null) : null;
+
     res.json({
       obra: { id: obra.id, nombre: obra.nombre, codigo: obra.codigo },
       presupuesto: header ? {
@@ -311,8 +316,16 @@ router.get("/:id/presupuesto", async (req: Request, res: Response) => {
         mesCac: header.mesCac,
         coefGGBB: header.coefGGBB ? Number(header.coefGGBB) : null,
       } : null,
-      cacValor: header ? Number(header.cacValor) : null,
+      cacValor: cacValorNum,
       mesCac: header?.mesCac ?? null,
+      icc: {
+        base: cacValorNum,
+        actual: latestIcc?.valorAbsoluto ?? null,
+        coef: coefICC,
+        mesBase: header?.mesCac ?? null,
+        mesActual: latestIcc?.mesLabel ?? null,
+        variacionMensual: latestIcc?.variacionMensual ?? null,
+      },
       totalMat,
       totalMO,
       totalEQ,
@@ -977,6 +990,137 @@ router.put("/:id/cronograma", async (req: Request, res: Response) => {
     res.json({ ok: true, filas: filas.length, cronogramaFilas: cronoData.length, meses: meses.length });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : "Error al guardar cronograma" });
+  }
+});
+
+// ─── Avance REAL de ejecución ────────────────────────────────────────────────
+// Selecciona el presupuesto vigente de la obra y lista rubros → tareas con su % acumulado real
+// (suma de incrementos reportados). El avance del rubro y global se pondera por costo directo.
+// GET /api/obras/:id/avance
+router.get("/:id/avance", async (req: Request, res: Response) => {
+  try {
+    const obra = await prisma.obra.findUnique({ where: { id: req.params.id } });
+    if (!obra) return res.status(404).json({ error: "Obra no encontrada" });
+
+    const header = await prisma.presupuestoHeader.findFirst({
+      where: { obraId: obra.id, estado: "vigente" },
+      orderBy: { createdAt: "desc" },
+      select: { id: true },
+    });
+    if (!header) {
+      return res.json({ obra: { id: obra.id, nombre: obra.nombre, codigo: obra.codigo }, rubros: [], avanceGlobal: { pctReal: 0 } });
+    }
+
+    const lineas = await prisma.lineaPresupuesto.findMany({
+      where: { obraId: obra.id, presupuestoHeaderId: header.id },
+      include: {
+        partida: { select: { descripcion: true, unidad: true } },
+        avances: { select: { pctIncremento: true, cantidad: true, fecha: true }, orderBy: { fecha: "desc" } },
+      },
+      orderBy: [{ orden: "asc" }, { rubro: "asc" }],
+    });
+
+    type Tarea = {
+      lineaId: string; itemNumero: string | null; descripcion: string; unidad: string;
+      cantidad: number; costoDirecto: number;
+      pctAcumulado: number; cantidadEjecutada: number; ultimoReporte: string | null;
+    };
+    const rubrosMap = new Map<string, { nombre: string; tareas: Tarea[]; costo: number; costoPonderado: number }>();
+
+    for (const l of lineas) {
+      const cantidad = Number(l.cantidad);
+      const cdUd = Number(l.precioUnitarioSnapshot);
+      const costoDirecto = cantidad * cdUd;
+      const sum = l.avances.reduce((s, a) => s + Number(a.pctIncremento), 0);
+      const pctAcumulado = Math.min(1, Math.max(0, sum));
+      const cantidadEjecutada = cantidad * pctAcumulado;
+      const ultimoReporte = l.avances[0]?.fecha ? l.avances[0].fecha.toISOString() : null;
+
+      const tarea: Tarea = {
+        lineaId: l.id, itemNumero: l.itemNumero,
+        descripcion: l.descripcionLibre ?? l.partida?.descripcion ?? "—",
+        unidad: l.partida?.unidad ?? "u",
+        cantidad, costoDirecto, pctAcumulado, cantidadEjecutada, ultimoReporte,
+      };
+
+      const rubro = l.rubro || "GENERAL";
+      if (!rubrosMap.has(rubro)) rubrosMap.set(rubro, { nombre: rubro, tareas: [], costo: 0, costoPonderado: 0 });
+      const g = rubrosMap.get(rubro)!;
+      g.tareas.push(tarea);
+      g.costo += costoDirecto;
+      g.costoPonderado += costoDirecto * pctAcumulado;
+    }
+
+    let costoTotal = 0, costoPonderadoTotal = 0;
+    const rubros = [...rubrosMap.values()].map((g) => {
+      costoTotal += g.costo;
+      costoPonderadoTotal += g.costoPonderado;
+      const pct = g.costo > 0
+        ? g.costoPonderado / g.costo
+        : (g.tareas.length ? g.tareas.reduce((s, t) => s + t.pctAcumulado, 0) / g.tareas.length : 0);
+      return { nombre: g.nombre, pctAcumulado: pct, tareas: g.tareas };
+    });
+
+    const pctReal = costoTotal > 0 ? costoPonderadoTotal / costoTotal : 0;
+
+    res.json({
+      obra: { id: obra.id, nombre: obra.nombre, codigo: obra.codigo },
+      rubros,
+      avanceGlobal: { pctReal, costoDirecto: costoTotal, montoEjecutado: costoPonderadoTotal },
+    });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Error al obtener avance" });
+  }
+});
+
+// POST /api/obras/:id/avance — reportar un incremento de avance de una tarea.
+// Body: { lineaId, pctIncremento?: número 0..100 (%), cantidad?: número (de la tarea), nota? }
+// Se pasa % directo O una cantidad ejecutada (que el server convierte a % sobre la cantidad de la tarea).
+router.post("/:id/avance", async (req: Request, res: Response) => {
+  try {
+    const { lineaId, pctIncremento, cantidad, nota } = req.body as {
+      lineaId?: string; pctIncremento?: number; cantidad?: number; nota?: string;
+    };
+    if (!lineaId) return res.status(400).json({ error: "lineaId es requerido" });
+
+    const linea = await prisma.lineaPresupuesto.findFirst({
+      where: { id: lineaId, obraId: req.params.id },
+      include: { avances: { select: { pctIncremento: true } } },
+    });
+    if (!linea) return res.status(404).json({ error: "Tarea no encontrada en esta obra" });
+
+    const cantTarea = Number(linea.cantidad);
+    let frac: number;        // incremento como fracción 0..1
+    let cantReportada: number | null = null;
+
+    if (cantidad != null && !isNaN(cantidad)) {
+      if (cantTarea <= 0) return res.status(400).json({ error: "La tarea no tiene cantidad — reportá por porcentaje" });
+      cantReportada = cantidad;
+      frac = cantidad / cantTarea;
+    } else if (pctIncremento != null && !isNaN(pctIncremento)) {
+      frac = pctIncremento / 100;
+    } else {
+      return res.status(400).json({ error: "Indicá pctIncremento (%) o cantidad" });
+    }
+    if (frac <= 0) return res.status(400).json({ error: "El avance debe ser mayor a 0" });
+
+    const acumPrevio = Math.min(1, linea.avances.reduce((s, a) => s + Number(a.pctIncremento), 0));
+
+    await prisma.avanceReporte.create({
+      data: { lineaId, pctIncremento: frac, cantidad: cantReportada, nota: nota || null },
+    });
+
+    const acumNuevo = Math.min(1, acumPrevio + frac);
+    res.json({
+      ok: true,
+      lineaId,
+      pctAnterior: acumPrevio,
+      pctIncremento: frac,
+      pctAcumulado: acumNuevo,
+      cantidadEjecutada: cantTarea * acumNuevo,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Error al reportar avance" });
   }
 });
 

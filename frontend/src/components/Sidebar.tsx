@@ -2,7 +2,7 @@ import { useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, Building2, Package, LogOut,
-  ChevronDown, FileText, Upload, Boxes,
+  ChevronDown, FileText, Upload, Boxes, ClipboardCheck, Menu, X,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { cn } from "../lib/cn";
@@ -28,13 +28,15 @@ interface NavItemProps {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
   end?: boolean;
+  onNavigate?: () => void;
 }
 
-function NavItem({ to, icon: Icon, label, end }: NavItemProps) {
+function NavItem({ to, icon: Icon, label, end, onNavigate }: NavItemProps) {
   return (
     <NavLink
       to={to}
       end={end}
+      onClick={onNavigate}
       className={({ isActive }) => cn(
         "group flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150",
         isActive
@@ -74,15 +76,14 @@ function NavGroup({ label, children, defaultOpen = true }: {
   );
 }
 
-export function Sidebar() {
+// Contenido compartido por el sidebar de escritorio y el drawer móvil.
+function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const { usuario, logout } = useAuth();
   const location = useLocation();
-
-  // Catálogo expandido por defecto cuando estás dentro
   const inCatalogo = location.pathname.startsWith("/catalogo");
 
   return (
-    <aside className="w-64 shrink-0 bg-white border-r border-stone-200 flex flex-col h-screen sticky top-0">
+    <>
       <div className="px-5 py-5 border-b border-stone-100">
         <div className="flex items-center gap-3">
           <ArquineringLogo size={38} />
@@ -95,15 +96,16 @@ export function Sidebar() {
 
       <nav className="flex-1 px-3 py-4 space-y-5 overflow-y-auto">
         <NavGroup label="Principal" defaultOpen>
-          <NavItem to="/" icon={LayoutDashboard} label="Dashboard" end />
-          <NavItem to="/obras" icon={Building2} label="Obras" />
-          <NavItem to="/proyeccion" icon={Boxes} label="Proyección de insumos" />
+          <NavItem to="/" icon={LayoutDashboard} label="Dashboard" end onNavigate={onNavigate} />
+          <NavItem to="/obras" icon={Building2} label="Obras" onNavigate={onNavigate} />
+          <NavItem to="/avance" icon={ClipboardCheck} label="Avance de obra" onNavigate={onNavigate} />
+          <NavItem to="/proyeccion" icon={Boxes} label="Proyección de insumos" onNavigate={onNavigate} />
         </NavGroup>
 
         <NavGroup label="Catálogo" defaultOpen={inCatalogo}>
-          <NavItem to="/catalogo/partidas" icon={FileText} label="Partidas APU" />
-          <NavItem to="/catalogo/insumos" icon={Package} label="Insumos" />
-          <NavItem to="/catalogo/importar" icon={Upload} label="Importar APU" />
+          <NavItem to="/catalogo/partidas" icon={FileText} label="Partidas APU" onNavigate={onNavigate} />
+          <NavItem to="/catalogo/insumos" icon={Package} label="Insumos" onNavigate={onNavigate} />
+          <NavItem to="/catalogo/importar" icon={Upload} label="Importar APU" onNavigate={onNavigate} />
         </NavGroup>
       </nav>
 
@@ -129,6 +131,49 @@ export function Sidebar() {
           </button>
         </div>
       </div>
-    </aside>
+    </>
+  );
+}
+
+export function Sidebar() {
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  return (
+    <>
+      {/* Top bar móvil */}
+      <div className="md:hidden fixed top-0 inset-x-0 z-30 h-14 bg-white border-b border-stone-200 flex items-center gap-3 px-4">
+        <button
+          onClick={() => setMobileOpen(true)}
+          className="p-1.5 -ml-1.5 rounded-lg text-stone-600 hover:bg-stone-100 active:bg-stone-200"
+          aria-label="Abrir menú"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+        <ArquineringLogo size={28} />
+        <span className="text-sm font-bold text-stone-900">Groundwork</span>
+      </div>
+
+      {/* Drawer móvil */}
+      {mobileOpen && (
+        <div className="md:hidden fixed inset-0 z-40">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setMobileOpen(false)} />
+          <aside className="absolute left-0 top-0 h-full w-72 max-w-[85%] bg-white flex flex-col shadow-xl">
+            <button
+              onClick={() => setMobileOpen(false)}
+              className="absolute top-4 right-3 p-1.5 rounded-lg text-stone-400 hover:bg-stone-100 z-10"
+              aria-label="Cerrar menú"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <SidebarContent onNavigate={() => setMobileOpen(false)} />
+          </aside>
+        </div>
+      )}
+
+      {/* Sidebar escritorio */}
+      <aside className="hidden md:flex w-64 shrink-0 bg-white border-r border-stone-200 flex-col h-screen sticky top-0">
+        <SidebarContent />
+      </aside>
+    </>
   );
 }

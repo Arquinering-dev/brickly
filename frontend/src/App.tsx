@@ -12,6 +12,7 @@ import PartidaDetailPage from "./pages/PartidaDetailPage";
 import CatalogosPage from "./pages/CatalogosPage";
 import PresupuestoPage from "./pages/PresupuestoPage";
 import ProyeccionPage from "./pages/ProyeccionPage";
+import AvancePage from "./pages/AvancePage";
 import ImportPage from "./pages/ImportPage";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -24,13 +25,14 @@ function Layout() {
   return (
     <div className="flex min-h-screen bg-surface">
       <Sidebar />
-      <main className="flex-1 overflow-auto">
+      <main className="flex-1 overflow-auto pt-14 md:pt-0">
         <Routes>
           <Route path="/" element={<DashboardPage />} />
           <Route path="/obras" element={<ObrasListPage />} />
           <Route path="/obras/:id" element={<ObraDetailPage />} />
           <Route path="/obras/:id/:tab" element={<ObraDetailPage />} />
           <Route path="/proyeccion" element={<ProyeccionPage />} />
+          <Route path="/avance" element={<AvancePage />} />
 
           {/* Catálogo */}
           <Route path="/catalogo" element={<Navigate to="/catalogo/partidas" replace />} />
@@ -38,6 +40,7 @@ function Layout() {
           <Route path="/catalogo/partidas/:id" element={<PartidaDetailPage />} />
           <Route path="/catalogo/insumos" element={<CatalogosPage />} />
           <Route path="/catalogo/presupuestos" element={<PresupuestoPage />} />
+          <Route path="/catalogo/presupuestos/nuevo" element={<PresupuestoPage />} />
           <Route path="/catalogo/presupuestos/:id" element={<PresupuestoPage />} />
           <Route path="/catalogo/importar" element={<ImportPage />} />
 

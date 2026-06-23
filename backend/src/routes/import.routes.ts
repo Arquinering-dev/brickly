@@ -2,11 +2,14 @@
  * POST /api/import/apu?dry=1   → preview (no escribe en DB)
  * POST /api/import/apu         → importa definitivamente
  *
+ * Consume el "Resumen de Obra" de Arquinering (hojas 0_CONFIG, 0_Indice_CAC,
+ * 1_Composicion, 1_Presupuesto). Reemplazó al importador del APU_Unificado.
+ *
  * Body: multipart/form-data, campo "file" con el .xlsx
  */
 import { Router, Request, Response } from "express";
 import multer from "multer";
-import { importApuXlsx } from "../services/apu-import.service";
+import { importResumenXlsx } from "../services/resumen-import.service";
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
@@ -23,7 +26,7 @@ router.post(
     const dryRun = req.query.dry === "1" || req.query.dry === "true";
 
     try {
-      const result = await importApuXlsx(req.file.buffer, { dryRun });
+      const result = await importResumenXlsx(req.file.buffer, { dryRun, filename: req.file.originalname });
 
       if (!dryRun && result.errors.length > 0) {
         res.status(422).json({

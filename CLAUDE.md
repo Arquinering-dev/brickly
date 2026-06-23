@@ -78,27 +78,40 @@ TipoPresupuesto: GENERADOR | APROBADO
 
 ---
 
-## Importación de datos — APU Unificado
+## Importación de datos — Resumen de Obra
 
-El formato de Excel principal es **APU_Unificado** (formato GDR). Tiene estas hojas clave:
+El formato de Excel que se importa es el **"Resumen de Obra"** de Arquinering (v8+). Entra por
+`POST /api/import/apu` (`?dry=1` para preview). Lógica en
+`backend/src/services/resumen-import.service.ts` (`importResumenXlsx`).
+
+> El importador viejo del **APU_Unificado** (`apu-import.service.ts`) fue eliminado. El historial
+> de ese formato vive en git si hace falta.
+
+Hojas que consume (solo estas cuatro):
 
 | Hoja | → DB | Descripción |
 |------|------|-------------|
-| `MATERIALES` | `Insumo` (MATERIAL) | Catálogo de materiales con precio y proveedor |
-| `MANO_DE_OBRA` | `Insumo` (MANO_DE_OBRA) | Jornales con cargas sociales |
-| `EQUIPOS` | `Insumo` (EQUIPO) | Costo por día de equipos |
-| `SUBCONTRATOS` | `Insumo` (SUBCONTRATO) | Precios de subcontratistas |
-| `PARTIDAS` | `Partida` | 269 APUs con código, rubro, unidad, rendimiento |
-| `COMPOSICIÓN` | `Composicion` | 1846 filas: partida × insumo × cantidad |
+| `0_CONFIG` | `Obra` + `PresupuestoHeader` | label/valor: nombre, estado, **Valor CAC base** → `cacValor`, **Mes base CAC**, **K** → `coefGGBB`, fecha inicio |
+| `0_Indice_CAC` | `IndiceICC` | Serie mensual del ICC (valores absolutos reales INDEC). Omite proyecciones y meses futuros |
+| `1_Composicion` | `Insumo` + `Partida` + `Composicion` | Deriva insumos (dedup por código) y partidas. Col 17 `Cod_Item_Ppto` linkea cada partida con su ítem de presupuesto |
+| `1_Presupuesto` | `LineaPresupuesto` | Tareas con costos (MT/MO-OTR/MO-ALB/EQ por ud), CD/ud y **precio de venta unitario real** (col 15) |
 
-**Script de verificación antes de importar:**
-```bash
-cd backend && npx tsx scripts/verify-apu.ts [ruta-al-xlsx]
-```
+Detalles clave:
+- **Código de obra** se deriva del nombre de archivo (`CH_2171_Resumen…` → `CH2171`) para no
+  duplicar obras existentes.
+- Crea **un** `PresupuestoHeader` (tipo `APROBADO`, `estado=vigente`) y reemplaza todos los headers
+  previos de la obra (import idempotente). Las vistas eligen header por `estado=vigente` + más
+  reciente, no por tipo.
+- El **ICC** se pobla solo desde `0_Indice_CAC` → el coeficiente de actualización
+  (`coef = ICC_actual / cacValor`) se calcula sin carga manual.
+- **Cronograma mensual: pendiente.** `parseCronograma` ya detecta columnas de meses (header con
+  fecha o `YYYY-MM`) en `1_Presupuesto` y arma las `LineaCronograma`; cuando Arquinering agregue
+  esas columnas se llena solo. Hasta entonces el cronograma queda vacío y **la Proyección de
+  insumos se ve vacía** (distribuye insumos mes a mes según el cronograma).
 
-**Script de seed:**
+**Dry-run desde script:**
 ```bash
-cd backend && npm run seed:apu
+cd backend && npx tsx scripts/test-import-dry.ts [ruta-al-resumen.xlsx]
 ```
 
 ---
@@ -205,7 +218,7 @@ El frontend en dev hace proxy de `/api/*` → `http://localhost:3000` (configura
 > `gemini.client.ts` + `categorizer.ts`). Corre en **write-time** (al importar una obra, y vía
 > backfill), nunca en el hot-path por request:
 >
-> - Al importar (`apu-import.service.ts`), después del upsert de insumos, Gemini lee
+> - Al importar (`resumen-import.service.ts`), después del upsert de insumos, Gemini lee
 >   descripción+tipo de cada insumo **sin `categoriaCanonica`** y le asigna una categoría canónica
 >   (Corralón, Acero, Eléctricos, UOCRA, etc.). Se persiste en `Insumo.categoriaCanonica` +
 >   `fuenteCategoria='ia'`. El bulk-upsert NO pisa `categoriaCanonica`, así que re-importar no
@@ -227,5 +240,9 @@ El frontend en dev hace proxy de `/api/*` → `http://localhost:3000` (configura
 - ✅ Dashboard con métricas de obra
 - ✅ Sidebar de navegación
 - ✅ Librería UI completa (Button, Card, Dialog, Badge, Tabs, etc.)
-- 🔄 Importador APU Unificado (pendiente — script de verificación listo)
-- 🔄 Pantalla de importación en la UI
+- ✅ Importador del Resumen de Obra (presupuesto + composición + ICC automático)
+- ✅ Pantalla de importación en la UI
+- ✅ Coeficiente de actualización ICC (Dashboard, presupuestos, obra)
+- ✅ Reporte de avance real de obra (mobile/web): `/avance`, modelo `AvanceReporte`, real vs previsto
+- ✅ Layout responsive (sidebar drawer en mobile, presupuesto legible en celular)
+- 🔄 Cronograma mensual desde `1_Presupuesto` (pendiente: faltan columnas de meses en el Excel) → habilita la Proyección de insumos

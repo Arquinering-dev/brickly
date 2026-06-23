@@ -9,10 +9,19 @@ import { apiFetch } from "../lib/api";
 
 const fmtMoney = (n: number) =>
   n.toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 });
-const fmtNum = (n: number, dec = 2) =>
+const fmtNum = (n: number, dec = 0) =>
   n.toLocaleString("es-AR", { minimumFractionDigits: dec, maximumFractionDigits: dec });
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
+
+interface IccInfo {
+  base: number;
+  actual: number | null;
+  coef: number | null;
+  mesBase: string | null;
+  mesActual: string | null;
+  variacionMensual: number | null;
+}
 
 interface PresupuestoListItem {
   id: string;
@@ -28,6 +37,7 @@ interface PresupuestoListItem {
   rubrosCount: number;
   totalCD: number;
   totalPV: number;
+  icc?: IccInfo;
 }
 
 interface LineaDB {
@@ -48,8 +58,116 @@ interface LineaDB {
 
 export default function PresupuestoPage() {
   const { id } = useParams<{ id: string }>();
+  if (id === "nuevo") return <NuevoPresupuesto />;
   if (id) return <PresupuestoDetalle headerId={id} />;
   return <PresupuestoLista />;
+}
+
+// ─── Nuevo ────────────────────────────────────────────────────────────────────
+
+function NuevoPresupuesto() {
+  const navigate = useNavigate();
+  const [obras, setObras] = useState<{ id: string; nombre: string; codigo: string }[]>([]);
+  const [obraId, setObraId] = useState("");
+  const [tipo, setTipo] = useState<"GENERADOR" | "APROBADO">("GENERADOR");
+  const [nombre, setNombre] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    apiFetch("/api/obras").then(r => r.json()).then((data: { id: string; nombre: string; codigo: string }[]) => {
+      setObras(data);
+      if (data.length === 1) setObraId(data[0].id);
+    }).catch(() => {});
+  }, []);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!obraId) { setError("Seleccioná una obra"); return; }
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await apiFetch("/api/presupuestos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ obraId, tipo, nombre: nombre.trim() || undefined }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error((d as { error?: string }).error ?? "Error al crear");
+      }
+      const created = await res.json() as { id: string };
+      navigate(`/catalogo/presupuestos/${created.id}`, { replace: true });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error desconocido");
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="p-8 max-w-lg">
+      <button onClick={() => navigate(-1)} className="text-sm text-stone-400 hover:text-stone-700 mb-6 flex items-center gap-1">
+        ← Volver
+      </button>
+      <h1 className="text-2xl font-black text-stone-900 mb-1">Nuevo presupuesto</h1>
+      <p className="text-sm text-stone-500 mb-6">Crea un presupuesto vacío. Para importar desde Excel usá <button onClick={() => navigate("/catalogo/importar")} className="underline text-brand-600">Importar APU</button>.</p>
+
+      <form onSubmit={handleSubmit} className="space-y-4 bg-white border border-stone-200 rounded-2xl p-6">
+        <div>
+          <label className="block text-sm font-medium text-stone-700 mb-1.5">Obra <span className="text-red-500">*</span></label>
+          <select
+            value={obraId}
+            onChange={e => setObraId(e.target.value)}
+            className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-500"
+            required
+          >
+            <option value="">— Seleccionar obra —</option>
+            {obras.map(o => (
+              <option key={o.id} value={o.id}>{o.codigo} · {o.nombre}</option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-stone-700 mb-1.5">Tipo</label>
+          <div className="flex gap-3">
+            {(["GENERADOR", "APROBADO"] as const).map(t => (
+              <label key={t} className="flex items-center gap-2 cursor-pointer">
+                <input type="radio" name="tipo" value={t} checked={tipo === t} onChange={() => setTipo(t)} className="accent-brand-600" />
+                <span className="text-sm text-stone-700">{t === "GENERADOR" ? "Generador" : "Aprobado"}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-stone-700 mb-1.5">Nombre <span className="text-stone-400 font-normal">(opcional)</span></label>
+          <input
+            type="text"
+            value={nombre}
+            onChange={e => setNombre(e.target.value)}
+            placeholder="Ej: Versión 1 — Oferta inicial"
+            className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-500"
+          />
+        </div>
+
+        {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
+
+        <div className="flex gap-3 pt-2">
+          <button
+            type="submit"
+            disabled={saving || !obraId}
+            className="flex-1 py-2.5 bg-brand-600 text-white rounded-lg text-sm font-semibold hover:bg-brand-700 disabled:opacity-40"
+          >
+            {saving ? "Creando…" : "Crear presupuesto"}
+          </button>
+          <button type="button" onClick={() => navigate(-1)} className="px-4 py-2.5 border border-stone-200 rounded-lg text-sm text-stone-600 hover:bg-stone-50">
+            Cancelar
+          </button>
+        </div>
+      </form>
+    </div>
+  );
 }
 
 // ─── Lista ────────────────────────────────────────────────────────────────────
@@ -123,7 +241,25 @@ function PresupuestoLista() {
               </div>
               <p className="text-base font-bold text-stone-900 mb-1 truncate">{p.obra.nombre}</p>
               <p className="text-xs text-stone-500 mb-1">{p.nombre || "—"}</p>
-              <p className="text-xs text-stone-400 mb-4">Mes base: {p.mesCac || "—"}{p.coefGGBB ? ` · GGBB ×${p.coefGGBB}` : ""}</p>
+              <p className="text-xs text-stone-400 mb-3">Mes base: {p.mesCac || "—"}{p.coefGGBB ? ` · GGBB ×${p.coefGGBB}` : ""}</p>
+              {/* Bloque ICC */}
+              {p.icc?.coef != null ? (
+                <div className="mb-3 bg-amber-50 border border-amber-200 rounded-lg p-2.5">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] uppercase tracking-wider text-amber-700 font-semibold">Actualizado ICC</span>
+                    <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-full">×{p.icc.coef.toFixed(3)}</span>
+                  </div>
+                  <div className="flex items-baseline justify-between gap-2">
+                    <p className="text-base font-black text-stone-900">{fmtMoney(p.totalPV > 0 ? p.totalPV * p.icc.coef : p.totalCD * p.icc.coef)}</p>
+                    <p className="text-[10px] text-stone-400 line-through">{fmtMoney(p.totalPV > 0 ? p.totalPV : p.totalCD)}</p>
+                  </div>
+                  <p className="text-[10px] text-stone-400 mt-0.5">{p.icc.mesBase} → {p.icc.mesActual}</p>
+                </div>
+              ) : p.icc?.variacionMensual != null ? (
+                <div className="mb-3 bg-stone-50 border border-stone-200 rounded-lg px-2.5 py-2 text-[10px] text-stone-500">
+                  ICC {p.icc.mesActual}: +{p.icc.variacionMensual.toFixed(1)}% mensual · valor absoluto no disponible
+                </div>
+              ) : null}
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <div>
                   <p className="text-stone-400">Costo directo</p>
@@ -163,7 +299,7 @@ function PresupuestoLista() {
 function PresupuestoDetalle({ headerId }: { headerId: string }) {
   const navigate = useNavigate();
   const [lineas, setLineas] = useState<LineaDB[]>([]);
-  const [header, setHeader] = useState<PresupuestoListItem | null>(null);
+  const [header, setHeader] = useState<PresupuestoListItem & { icc?: IccInfo } | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -206,7 +342,7 @@ function PresupuestoDetalle({ headerId }: { headerId: string }) {
       </div>
 
       {/* Totales */}
-      <div className="bg-gradient-to-br from-stone-900 to-stone-800 text-white rounded-2xl p-5 mb-6 grid grid-cols-3 gap-6">
+      <div className="bg-gradient-to-br from-stone-900 to-stone-800 text-white rounded-2xl p-5 mb-4 grid grid-cols-3 gap-6">
         <div>
           <p className="text-xs uppercase text-stone-400 mb-1">Ítems</p>
           <p className="text-2xl font-black">{lineas.length}</p>
@@ -220,6 +356,44 @@ function PresupuestoDetalle({ headerId }: { headerId: string }) {
           <p className="text-2xl font-black">{rubros.length}</p>
         </div>
       </div>
+
+      {/* Bloque ICC — precio base vs actualizado */}
+      {header?.icc && (
+        header.icc.coef != null ? (
+          <div className="mb-4 bg-amber-50 border border-amber-200 rounded-2xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <p className="text-xs uppercase tracking-wider text-amber-700 font-semibold">Precio actualizado por ICC · INDEC</p>
+                <p className="text-[10px] text-amber-600 mt-0.5">{header.icc.mesBase} → {header.icc.mesActual}</p>
+              </div>
+              <span className="text-sm font-black text-amber-700 bg-amber-100 px-2.5 py-1 rounded-full">
+                ×{header.icc.coef.toFixed(3)}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-[10px] uppercase text-stone-400 mb-0.5">Costo directo actualizado</p>
+                <p className="text-xl font-black text-stone-900">{fmtMoney(totalCD * header.icc.coef)}</p>
+                <p className="text-xs text-stone-400 line-through mt-0.5">{fmtMoney(totalCD)}</p>
+              </div>
+              {header.cacValor > 0 && (
+                <div>
+                  <p className="text-[10px] uppercase text-stone-400 mb-0.5">ICC base del presupuesto</p>
+                  <p className="text-xl font-black text-stone-900">{fmtNum(header.cacValor)}</p>
+                  <p className="text-xs text-stone-400 mt-0.5">actual: {fmtNum(header.icc.actual ?? 0)}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : header.icc.variacionMensual != null ? (
+          <div className="mb-4 bg-stone-50 border border-stone-200 rounded-2xl p-3 text-xs text-stone-500">
+            ICC {header.icc.mesActual}: +{header.icc.variacionMensual.toFixed(1)}% mensual ·
+            {header.cacValor > 0
+              ? " valor absoluto actual no disponible aún (se obtiene del FTP INDEC)."
+              : " importá el presupuesto nuevamente para capturar el valor base del ICC."}
+          </div>
+        ) : null
+      )}
 
       {/* Tabla por rubros */}
       {rubros.map((r) => (

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft, Building2, Calendar, AlertTriangle,
-  Calculator, History, Upload, Sparkles, FileSpreadsheet,
+  Calculator, History, Upload, Sparkles, FileSpreadsheet, TrendingUp,
 } from "lucide-react";
 import { Area, AreaChart, ResponsiveContainer, Tooltip as ReTooltip, XAxis, YAxis, CartesianGrid } from "recharts";
 import { apiFetch } from "../lib/api";
@@ -315,6 +315,13 @@ function ResumenTab({
         </Card>
       </div>
 
+      {/* Avance real de obra (reportado en obra) */}
+      <AvanceRealCard
+        obraId={obra.id}
+        previsto={cronograma?.cronogramaCargado ? cronograma.kpi?.pctAcumulado ?? null : null}
+        navigate={navigate}
+      />
+
       {/* Rubros breakdown */}
       {cronograma?.cronogramaCargado && cronograma.rubros.length > 0 && (
         <Card>
@@ -368,8 +375,18 @@ interface PptoRubro {
   totalMat: number; totalMO: number; totalEQ: number; totalPV: number; totalRubro: number;
   lineas: PptoLinea[];
 }
+interface PptoIcc {
+  base: number | null;
+  actual: number | null;
+  coef: number | null;
+  mesBase: string | null;
+  mesActual: string | null;
+  variacionMensual: number | null;
+}
 interface PptoData {
   presupuesto: { nombre: string | null; version: string | null; mesCac: string; coefGGBB: number | null } | null;
+  cacValor: number | null;
+  icc?: PptoIcc;
   totalMat: number; totalMO: number; totalEQ: number; totalGeneral: number; totalPV: number;
   rubros: PptoRubro[];
 }
@@ -399,9 +416,128 @@ function PresupuestoTab({ obraId }: { obraId: string }) {
         <DarkStat label="Costo directo" value={fmtMoney(data.totalGeneral, { compact: true })} />
         <DarkStat label="Precio venta" value={fmtMoney(data.totalPV, { compact: true })} accent />
       </div>
+      <IccPptoBlock icc={data.icc} cacValor={data.cacValor} totalPV={data.totalPV} totalCD={data.totalGeneral} />
       {data.rubros.map((r) => <RubroPptoSection key={r.nombre} rubro={r} />)}
     </div>
   );
+}
+
+// Tarjeta de avance REAL reportado en obra, con comparación contra el previsto del cronograma.
+interface AvanceRubro { nombre: string; pctAcumulado: number; tareas: unknown[] }
+interface AvanceResp { avanceGlobal: { pctReal: number }; rubros: AvanceRubro[] }
+function AvanceRealCard({ obraId, previsto, navigate }: { obraId: string; previsto: number | null; navigate: (p: string) => void }) {
+  const [data, setData] = useState<AvanceResp | null>(null);
+  useEffect(() => {
+    apiFetch(`/api/obras/${obraId}/avance`).then((r) => (r.ok ? r.json() : null)).then(setData).catch(() => {});
+  }, [obraId]);
+
+  const real = data?.avanceGlobal.pctReal ?? 0;
+  const conReportes = (data?.rubros ?? []).some((r) => r.pctAcumulado > 0);
+  const topRubros = (data?.rubros ?? []).filter((r) => r.pctAcumulado > 0).sort((a, b) => b.pctAcumulado - a.pctAcumulado).slice(0, 8);
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <CardTitle>Avance real de obra</CardTitle>
+            <CardDescription>Reportado en obra — ponderado por costo</CardDescription>
+          </div>
+          <Button size="sm" variant="outline" onClick={() => navigate("/avance")}>
+            <TrendingUp /> Reportar avance
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div>
+          <div className="flex items-center justify-between text-sm mb-2">
+            <span className="text-stone-600">Ejecutado real</span>
+            <span className="font-bold text-stone-900 text-lg">{fmtPct(real)}</span>
+          </div>
+          <Progress value={real * 100} className="h-3" indicatorClassName="bg-emerald-600" />
+          {previsto != null && (
+            <p className="text-2xs text-stone-500 mt-1.5">
+              Previsto a hoy: <span className="font-semibold">{fmtPct(previsto)}</span>
+              {real < previsto ? " · vas por detrás del plan" : real > previsto ? " · vas adelante del plan" : ""}
+            </p>
+          )}
+        </div>
+        {conReportes ? (
+          <div className="space-y-2">
+            {topRubros.map((r) => (
+              <div key={r.nombre}>
+                <div className="flex items-center justify-between text-xs mb-1">
+                  <span className="font-medium text-stone-800 truncate mr-2">{r.nombre}</span>
+                  <span className="font-bold text-stone-600 tabular-nums">{fmtPct(r.pctAcumulado)}</span>
+                </div>
+                <Progress value={r.pctAcumulado * 100} indicatorClassName="bg-emerald-500" />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-stone-400">Todavía no se reportó avance. Tocá "Reportar avance" para cargar desde el celular.</p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function IccPptoBlock({ icc, cacValor, totalPV, totalCD }: { icc?: PptoIcc; cacValor: number | null; totalPV: number; totalCD: number }) {
+  const navigate = useNavigate();
+  const base = totalPV > 0 ? totalPV : totalCD;
+
+  // Coeficiente disponible → mostrar precio actualizado
+  if (icc?.coef != null && icc.coef > 0) {
+    return (
+      <Card className="p-5 bg-gradient-to-br from-amber-50 to-orange-50 border-amber-200/70">
+        <div className="flex items-center justify-between flex-wrap gap-4">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-amber-700" />
+              <p className="text-xs uppercase tracking-wider text-amber-700 font-semibold">Precio actualizado por ICC · INDEC</p>
+            </div>
+            <p className="text-[11px] text-amber-600 mt-0.5">
+              {icc.mesBase ?? "base"} → {icc.mesActual ?? "actual"} · ICC {icc.base?.toLocaleString("es-AR")} → {icc.actual?.toLocaleString("es-AR")}
+            </p>
+          </div>
+          <div className="flex items-center gap-3 sm:gap-6">
+            <div className="text-right">
+              <p className="text-[10px] uppercase tracking-wider text-stone-400 mb-0.5">Presupuestado</p>
+              <p className="text-xs sm:text-sm font-semibold text-stone-500 line-through tabular-nums">{fmtMoney(base, { compact: true })}</p>
+            </div>
+            <div className="text-lg sm:text-2xl font-black text-amber-700 tabular-nums">×{icc.coef.toFixed(3)}</div>
+            <div className="text-right">
+              <p className="text-[10px] uppercase tracking-wider text-amber-700 mb-0.5 font-semibold">Precio a hoy</p>
+              <p className="text-lg sm:text-2xl font-black text-stone-900 tabular-nums">{fmtMoney(base * icc.coef, { compact: true })}</p>
+            </div>
+          </div>
+        </div>
+      </Card>
+    );
+  }
+
+  // Tiene base ICC pero falta el valor actual → guiar a cargarlo
+  if (cacValor && cacValor > 0) {
+    return (
+      <Card className="p-4 bg-stone-50 border-stone-200/70">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <p className="text-xs text-stone-500">
+            <span className="font-semibold text-stone-700">ICC base del presupuesto:</span> {cacValor.toLocaleString("es-AR")}
+            {icc?.mesBase ? ` (${icc.mesBase})` : ""}
+            {icc?.variacionMensual != null ? ` · último dato INDEC ${icc.mesActual}: +${icc.variacionMensual.toFixed(1)}% mensual` : ""}
+          </p>
+          <button
+            onClick={() => navigate("/")}
+            className="text-xs font-medium text-amber-700 hover:text-amber-800 underline underline-offset-2"
+          >
+            Ingresar nivel ICC actual para ver el precio a hoy →
+          </button>
+        </div>
+      </Card>
+    );
+  }
+
+  return null;
 }
 
 function DarkStat({ label, value, accent }: { label: string; value: string; accent?: boolean }) {

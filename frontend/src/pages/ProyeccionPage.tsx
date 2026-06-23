@@ -38,6 +38,12 @@ interface InsumoProy {
   totalMonto: number;
 }
 interface Mes { mes: string; fecha: string; label: string }
+interface IccData {
+  mes: number; anio: number; mesLabel: string;
+  variacionMensual: number | null;
+  variacionAnual: number | null;
+  valorAbsoluto: number | null;
+}
 interface ProyeccionData {
   obras: { id: string; nombre: string; codigo: string }[];
   obrasConDatos: string[];
@@ -46,6 +52,7 @@ interface ProyeccionData {
   insumos: InsumoProy[];
   totalMontoPorMes: Record<string, number>;
   cobertura: { cdConComposicion: number; cdTotal: number; pct: number };
+  icc: IccData | null;
 }
 
 const TIPOS = [
@@ -305,7 +312,7 @@ export default function ProyeccionPage() {
         </>
       )}
 
-      {sel && <DetailPanel ins={sel} onClose={() => setSel(null)} />}
+      {sel && <DetailPanel ins={sel} onClose={() => setSel(null)} icc={data?.icc ?? null} />}
     </div>
   );
 }
@@ -515,7 +522,7 @@ function CronogramaTable({ data, grupos, isOpen, toggle, modo, setModo, mesesPro
 }
 
 // ─── Panel de detalle del insumo ──────────────────────────────────────────────
-function DetailPanel({ ins, onClose }: { ins: InsumoView; onClose: () => void }) {
+function DetailPanel({ ins, onClose, icc }: { ins: InsumoView; onClose: () => void; icc: IccData | null }) {
   const meta = TIPO_META[ins.tipo];
   const rubros = Object.entries(ins.porRubro).sort(([, a], [, b]) => b.monto - a.monto);
   return (
@@ -559,11 +566,61 @@ function DetailPanel({ ins, onClose }: { ins: InsumoView; onClose: () => void })
             </div>
           </div>
 
-          <p className="text-2xs text-stone-400 leading-relaxed border-t border-stone-100 pt-3">
-            Precios al mes base del presupuesto — considerá el ajuste CAC para compras actuales.
-          </p>
+          <IccPriceBlock precioBase={ins.precioUnitario} montoBase={ins.totalMonto} unidad={ins.unidad} icc={icc} />
         </div>
       </div>
+    </div>
+  );
+}
+
+function IccPriceBlock({
+  precioBase, montoBase, unidad, icc, coef,
+}: {
+  precioBase: number;
+  montoBase: number;
+  unidad?: string;
+  icc: IccData | null;
+  coef?: number | null;
+}) {
+  const coefICC = coef ?? null;
+  const hasCoef = coefICC !== null && coefICC > 0;
+  const precioActualizado = hasCoef ? precioBase * coefICC : null;
+  const montoActualizado = hasCoef ? montoBase * coefICC : null;
+
+  return (
+    <div className="border-t border-stone-100 pt-3 space-y-2">
+      {hasCoef ? (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-2xs uppercase tracking-wider text-amber-700 font-semibold">Precio actualizado (ICC)</p>
+            <span className="text-2xs font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-full">
+              ×{coefICC.toFixed(3)}
+            </span>
+          </div>
+          <div className="flex items-end justify-between gap-2">
+            <div>
+              <p className="text-xl font-black text-stone-900">
+                {fmtMoney(precioActualizado!, { compact: true })}{unidad ? `/${unidad}` : ""}
+              </p>
+              <p className="text-[10px] text-stone-400 mt-0.5">
+                Costo total actualizado: {fmtMoney(montoActualizado!, { compact: true })}
+              </p>
+            </div>
+            <div className="text-right pb-0.5">
+              <p className="text-2xs text-stone-400">Base del ppto</p>
+              <p className="text-xs text-stone-500 font-medium line-through">
+                {fmtMoney(precioBase, { compact: true })}{unidad ? `/${unidad}` : ""}
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <p className="text-2xs text-stone-400">
+          {icc
+            ? `ICC ${icc.mesLabel}${icc.variacionMensual !== null ? `: +${icc.variacionMensual.toFixed(1)}% mensual` : ""}. Sin valor absoluto para calcular coeficiente.`
+            : "Cargando índice ICC…"}
+        </p>
+      )}
     </div>
   );
 }

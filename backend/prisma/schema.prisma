@@ -170,11 +170,31 @@ model LineaPresupuesto {
   // true si la IA normalizó el nombre del rubro al importar (ej: "H.A." → "Hormigón Armado")
   rubroNormalizado       Boolean           @default(false)
   cronograma             LineaCronograma[]
+  avances                AvanceReporte[]
   obra                   Obra              @relation(fields: [obraId], references: [id])
   presupuestoHeader      PresupuestoHeader @relation(fields: [presupuestoHeaderId], references: [id])
   partida                Partida?          @relation(fields: [partidaId], references: [id])
   createdAt              DateTime          @default(now())
   updatedAt              DateTime          @updatedAt
+}
+
+// Índice del Costo de la Construcción (ICC) publicado mensualmente por INDEC.
+// Se pobla automáticamente al iniciar el servidor (best-effort) y vía POST /api/indices/icc/fetch.
+model IndiceICC {
+  id               String   @id @default(uuid())
+  mes              Int      // 1-12
+  anio             Int
+  variacionMensual Decimal? @db.Decimal(8, 4)  // % vs mes anterior (nivel general)
+  variacionAnual   Decimal? @db.Decimal(8, 4)  // % vs mismo mes año anterior
+  // Valor absoluto del ICC nivel general (base Oct 2015 = 100).
+  // Cuando está disponible permite calcular coef = valorAbsoluto / cacValorBase.
+  valorAbsoluto    Decimal? @db.Decimal(16, 4)
+  fuente           String   // 'argly' | 'indec_ftp' | 'indec_sipm'
+  fetchedAt        DateTime
+  createdAt        DateTime @default(now())
+
+  @@unique([mes, anio])
+  @@index([anio, mes])
 }
 
 // Distribución mensual de ejecución de una tarea según el cronograma aprobado.
@@ -194,4 +214,22 @@ model LineaCronograma {
 
   @@unique([lineaId, mesOrdinal])
   @@index([fecha])
+}
+
+// Avance REAL de ejecución reportado en obra (distinto del cronograma previsto).
+// Cada fila es un incremento que carga el jefe de obra desde el celular. El avance acumulado
+// de una tarea = suma de pctIncremento de todas sus filas (clamp a 1.0 = 100%).
+model AvanceReporte {
+  id            String           @id @default(uuid())
+  lineaId       String
+  fecha         DateTime         @default(now())
+  // Incremento de avance de este reporte, fracción [0..1] (ej 0.20 = +20%).
+  pctIncremento Decimal          @db.Decimal(8, 6)
+  // Cantidad ejecutada que originó el incremento, si se cargó por cantidad (informativo).
+  cantidad      Decimal?         @db.Decimal(14, 4)
+  nota          String?
+  linea         LineaPresupuesto @relation(fields: [lineaId], references: [id], onDelete: Cascade)
+  createdAt     DateTime         @default(now())
+
+  @@index([lineaId])
 }

@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import prisma from "../prisma/client";
 import { calcCantInsumo } from "../lib/composicion";
+import { getLatestIccRaw } from "../lib/icc";
 import { categorizeInsumos, persistCategorias } from "../services/ai/categorizer";
 import { isGeminiConfigured } from "../services/ai/gemini.client";
 
@@ -198,6 +199,7 @@ router.get("/proyeccion", async (req: Request, res: Response) => {
         pct: cdTotal > 0 ? cdConComposicion / cdTotal : 0,
       },
       filtros: { obraId: obraIdFilter ?? null, tipo: tipoFilter ?? null, rubros: rubrosFilter ? [...rubrosFilter] : null },
+      icc: await getLatestIccRaw(),
     });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : "Error al obtener proyección" });

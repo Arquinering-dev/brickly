@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
 import prisma from "../prisma/client";
+import { getLatestIccRaw, calcCoefICC } from "../lib/icc";
 
 const router = Router();
 
@@ -21,6 +22,8 @@ router.get("/", async (req: Request, res: Response) => {
       orderBy: { createdAt: "desc" },
     });
 
+    const latestIcc = await getLatestIccRaw();
+
     const enriched = await Promise.all(
       headers.map(async (h) => {
         const agg = await prisma.lineaPresupuesto.aggregate({
@@ -39,6 +42,8 @@ router.get("/", async (req: Request, res: Response) => {
           totalPV += Number(l.precioVenta ?? 0) * Number(l.cantidad);
           if (l.rubro) rubrosSet.add(l.rubro);
         }
+        const cacValorNum = Number(h.cacValor);
+        const coefICC = calcCoefICC(cacValorNum, latestIcc?.valorAbsoluto ?? null);
         return {
           id: h.id,
           obra: h.obra,
@@ -47,7 +52,7 @@ router.get("/", async (req: Request, res: Response) => {
           version: h.version,
           estado: h.estado,
           mesCac: h.mesCac,
-          cacValor: Number(h.cacValor),
+          cacValor: cacValorNum,
           coefGGBB: h.coefGGBB ? Number(h.coefGGBB) : null,
           fecha: h.fecha,
           fechaInicio: h.fechaInicio,
@@ -56,6 +61,14 @@ router.get("/", async (req: Request, res: Response) => {
           totalCD,
           totalPV,
           createdAt: h.createdAt,
+          icc: {
+            base: cacValorNum,
+            actual: latestIcc?.valorAbsoluto ?? null,
+            coef: coefICC,
+            mesBase: h.mesCac || null,
+            mesActual: latestIcc?.mesLabel ?? null,
+            variacionMensual: latestIcc?.variacionMensual ?? null,
+          },
         };
       })
     );
@@ -85,7 +98,21 @@ router.get("/:id", async (req: Request, res: Response) => {
       res.status(404).json({ error: "Presupuesto no encontrado" });
       return;
     }
-    res.json(header);
+    const latestIcc = await getLatestIccRaw();
+    const cacValorNum = Number(header.cacValor);
+    res.json({
+      ...header,
+      cacValor: cacValorNum,
+      coefGGBB: header.coefGGBB ? Number(header.coefGGBB) : null,
+      icc: {
+        base: cacValorNum,
+        actual: latestIcc?.valorAbsoluto ?? null,
+        coef: calcCoefICC(cacValorNum, latestIcc?.valorAbsoluto ?? null),
+        mesBase: header.mesCac || null,
+        mesActual: latestIcc?.mesLabel ?? null,
+        variacionMensual: latestIcc?.variacionMensual ?? null,
+      },
+    });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : "Error al obtener presupuesto" });
   }
