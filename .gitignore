@@ -3,6 +3,9 @@ node_modules/
 .pnp
 .pnp.js
 
+# Root-level package-lock (monorepo: cada subproyecto tiene el suyo)
+/package-lock.json
+
 # Build outputs
 dist/
 build/

@@ -1124,4 +1124,260 @@ router.post("/:id/avance", async (req: Request, res: Response) => {
   }
 });
 
+// ─── Control financiero ────────────────────────────────────────────────────────
+
+function acum(map: Map<string, number>, key: string, value: number) {
+  map.set(key, (map.get(key) ?? 0) + value);
+}
+
+// GET /api/obras/:id/control
+// Dashboard completo: margen, bloques, flujo de caja, certificación, alertas
+router.get("/:id/control", async (req: Request, res: Response) => {
+  try {
+    const obraId = req.params.id;
+    const obra = await prisma.obra.findUnique({
+      where: { id: obraId },
+      select: { id: true, nombre: true, codigo: true },
+    });
+    if (!obra) { res.status(404).json({ error: "Obra no encontrada" }); return; }
+
+    let header = await prisma.presupuestoHeader.findFirst({
+      where: { obraId, estado: "vigente", tipo: "APROBADO" },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, tipo: true, nombre: true },
+    });
+    if (!header) {
+      header = await prisma.presupuestoHeader.findFirst({
+        where: { obraId, estado: "vigente" },
+        orderBy: { createdAt: "desc" },
+        select: { id: true, tipo: true, nombre: true },
+      });
+    }
+
+    // Traer todo en paralelo
+    const [lineas, movimientos, contratos, gastos] = await Promise.all([
+      header
+        ? prisma.lineaPresupuesto.findMany({
+            where: { obraId, presupuestoHeaderId: header.id },
+            select: { cantidad: true, costoMtUd: true, costoMoOtrUd: true, costoMoAlbUd: true,
+                      rubroMt: true, rubroMoOtr: true, rubroMoAlb: true,
+                      pctCertificado: true, pvMtUd: true, precioVenta: true },
+          })
+        : Promise.resolve([]),
+      prisma.movimiento.findMany({
+        where: { obraId },
+        select: { fecha: true, debe: true, haber: true, rubroContable: { select: { nombre: true } } },
+      }),
+      prisma.contratoCliente.findMany({
+        where: { obraId },
+        select: { presupuestoAprobado: true, pctAnticipo: true,
+                  certificaciones: { select: { fecha: true, baseBruta: true, estado: true } } },
+      }),
+      prisma.gastoDirInd.findMany({ where: { obraId }, select: { fecha: true, tipo: true, monto: true } }),
+    ]);
+
+    // ── Rubros ──────────────────────────────────────────────────────────────────
+    const pptoMap = new Map<string, number>();
+    for (const l of lineas) {
+      const c = Number(l.cantidad);
+      if (l.rubroMt) acum(pptoMap, l.rubroMt, Number(l.costoMtUd ?? 0) * c);
+      if (l.rubroMoOtr) acum(pptoMap, l.rubroMoOtr, Number(l.costoMoOtrUd ?? 0) * c);
+      if (l.rubroMoAlb) acum(pptoMap, l.rubroMoAlb, Number(l.costoMoAlbUd ?? 0) * c);
+    }
+    const realMap = new Map<string, number>();
+    for (const m of movimientos) {
+      const r = m.rubroContable?.nombre;
+      if (r) acum(realMap, r, Number(m.debe) - Number(m.haber));
+    }
+    type Semaforo = "ok" | "alerta" | "critico" | "sin_dato";
+    const rubros = Array.from(new Set([...pptoMap.keys(), ...realMap.keys()])).map((rubro) => {
+      const presupuestado = pptoMap.get(rubro) ?? 0;
+      const gastado = realMap.get(rubro) ?? 0;
+      const desvio = gastado - presupuestado;
+      const pctDesvio = presupuestado !== 0 ? desvio / presupuestado : 0;
+      let semaforo: Semaforo;
+      if (!realMap.has(rubro)) semaforo = "sin_dato";
+      else if (pctDesvio < 0.05) semaforo = "ok";
+      else if (pctDesvio < 0.15) semaforo = "alerta";
+      else semaforo = "critico";
+      return { rubro, presupuestado, gastado, desvio, pctDesvio, semaforo };
+    });
+    rubros.sort((a, b) => b.presupuestado - a.presupuestado);
+
+    const totPresupuestado = rubros.reduce((s, r) => s + r.presupuestado, 0);
+    const totGastado = rubros.reduce((s, r) => s + r.gastado, 0);
+    const totDesvio = totGastado - totPresupuestado;
+    const pctConsumo = totPresupuestado > 0 ? totGastado / totPresupuestado : 0;
+
+    // Avance físico ponderado
+    let numAv = 0, denAv = 0;
+    for (const l of lineas) {
+      const c = Number(l.cantidad);
+      const pv = Number(l.pvMtUd ?? l.precioVenta ?? 0);
+      numAv += Number(l.pctCertificado ?? 0) * pv * c;
+      denAv += pv * c;
+    }
+    const pctAvanceFisico = denAv > 0 ? numAv / denAv : 0;
+
+    // ── Margen de obra ───────────────────────────────────────────────────────────
+    const venta = contratos.reduce((s, c) => s + Number(c.presupuestoAprobado), 0);
+    const pctMargen = venta > 0 ? (venta - totGastado) / venta : 0;
+
+    // ── Bloques ──────────────────────────────────────────────────────────────────
+    const gastosPorTipo = new Map<string, number>();
+    for (const g of gastos) acum(gastosPorTipo, g.tipo, Number(g.monto));
+
+    const bloques = [
+      { nombre: "Costo de Obra", presupuestado: totPresupuestado, gastado: totGastado,
+        pctConsumo: totPresupuestado > 0 ? totGastado / totPresupuestado : null },
+      ...Array.from(gastosPorTipo.entries()).map(([tipo, monto]) => ({
+        nombre: `Gastos ${tipo}`, presupuestado: null as number | null,
+        gastado: monto, pctConsumo: null as number | null,
+      })),
+    ];
+
+    // ── Flujo de caja ────────────────────────────────────────────────────────────
+    const allCerts = contratos.flatMap((c) => c.certificaciones);
+    const ingByMes = new Map<string, number>();
+    for (const cert of allCerts) {
+      if (!cert.fecha) continue;
+      acum(ingByMes, cert.fecha.toISOString().slice(0, 7), Number(cert.baseBruta));
+    }
+    const egByMes = new Map<string, number>();
+    for (const m of movimientos) acum(egByMes, m.fecha.toISOString().slice(0, 7), Number(m.debe) - Number(m.haber));
+    for (const g of gastos) acum(egByMes, g.fecha.toISOString().slice(0, 7), Number(g.monto));
+
+    const mesesList = Array.from(new Set([...ingByMes.keys(), ...egByMes.keys()])).sort();
+    let acum_ = 0;
+    const flujoCaja = mesesList.map((mes) => {
+      const ingresos = ingByMes.get(mes) ?? 0;
+      const egresos = egByMes.get(mes) ?? 0;
+      acum_ += ingresos - egresos;
+      return { mes, ingresos, egresos, neto: ingresos - egresos, acumulado: acum_ };
+    });
+    const valleCaja = flujoCaja.length > 0 ? Math.min(...flujoCaja.map((f) => f.acumulado), 0) : 0;
+    const mesesNegCaja = flujoCaja.filter((f) => f.acumulado < 0).length;
+    const resultadoAcum = acum_;
+    const totalEgresos = flujoCaja.reduce((s, f) => s + f.egresos, 0);
+
+    // ── Certificación ────────────────────────────────────────────────────────────
+    const totalCertificado = allCerts.reduce((s, c) => s + Number(c.baseBruta), 0);
+    const cobrado = allCerts.filter((c) => c.estado === "cobrado" || c.estado === "pagado")
+                            .reduce((s, c) => s + Number(c.baseBruta), 0);
+    const anticipo = contratos.reduce((s, c) => s + Number(c.pctAnticipo) * Number(c.presupuestoAprobado), 0);
+
+    // ── Alertas ──────────────────────────────────────────────────────────────────
+    const alertas: Array<{ nivel: string; mensaje: string }> = [];
+    const rubrosDesvio = rubros.filter((r) => r.pctDesvio > 0.15 && r.desvio > 1_000_000);
+    if (rubrosDesvio.length > 0)
+      alertas.push({ nivel: "critico", mensaje: `${rubrosDesvio.length} rubro(s) con desvío >15% y >$1M` });
+    if (pctConsumo > 0.9)
+      alertas.push({ nivel: "critico", mensaje: `Consumo del ${(pctConsumo * 100).toFixed(0)}% del presupuesto` });
+    if (valleCaja < -5_000_000)
+      alertas.push({ nivel: "atencion", mensaje: `Valle de caja negativo: -$${(Math.abs(valleCaja) / 1_000_000).toFixed(1)}M` });
+    if (mesesNegCaja > 0)
+      alertas.push({ nivel: "info", mensaje: `${mesesNegCaja} mes(es) con caja negativa` });
+
+    res.json({
+      obra,
+      presupuestoHeader: header ? { id: header.id, tipo: header.tipo, nombre: header.nombre ?? null } : null,
+      margen: { venta, costoReal: totGastado, margen: venta - totGastado, pctMargen, resultadoAcum },
+      totales: { presupuestado: totPresupuestado, gastado: totGastado, desvio: totDesvio,
+                 pctDesvio: totPresupuestado !== 0 ? totDesvio / totPresupuestado : 0,
+                 pctConsumo, pctAvanceFisico },
+      bloques, rubros, flujoCaja,
+      flujoCajaMeta: { resultadoAcum, valleCaja, mesesNegCaja, cobrado, egresos: totalEgresos },
+      certificacion: { totalCertificado, pctFisico: venta > 0 ? totalCertificado / venta : pctAvanceFisico,
+                       anticipo, cobrado, pendienteCobro: totalCertificado - cobrado },
+      alertas,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Error al obtener control" });
+  }
+});
+
+// GET /api/obras/:id/movimientos
+// Listado paginado de movimientos con filtros opcionales
+router.get("/:id/movimientos", async (req: Request, res: Response) => {
+  try {
+    const obraId = req.params.id;
+    const obra = await prisma.obra.findUnique({ where: { id: obraId }, select: { id: true } });
+    if (!obra) { res.status(404).json({ error: "Obra no encontrada" }); return; }
+
+    const page = Math.max(1, parseInt((req.query.page as string) ?? "1", 10) || 1);
+    const perPage = Math.min(200, Math.max(1, parseInt((req.query.perPage as string) ?? "50", 10) || 50));
+    const desde = req.query.desde as string | undefined;
+    const hasta = req.query.hasta as string | undefined;
+    const rubroNombre = req.query.rubro as string | undefined;
+
+    const where = {
+      obraId,
+      ...(desde || hasta ? { fecha: { ...(desde ? { gte: new Date(desde) } : {}), ...(hasta ? { lte: new Date(hasta) } : {}) } } : {}),
+      ...(rubroNombre ? { rubroContable: { nombre: rubroNombre } } : {}),
+    };
+
+    const [total, items] = await Promise.all([
+      prisma.movimiento.count({ where }),
+      prisma.movimiento.findMany({
+        where,
+        include: {
+          rubroContable: { select: { nombre: true } },
+          subcontrato: { select: { contratoId: true } },
+        },
+        orderBy: { fecha: "desc" },
+        skip: (page - 1) * perPage,
+        take: perPage,
+      }),
+    ]);
+
+    res.json({ items, total, page, perPage });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Error al obtener movimientos" });
+  }
+});
+
+// GET /api/obras/:id/subcontratos
+// Lista de subcontratos de la obra ordenados por montoPpto desc
+router.get("/:id/subcontratos", async (req: Request, res: Response) => {
+  try {
+    const obraId = req.params.id;
+    const obra = await prisma.obra.findUnique({ where: { id: obraId }, select: { id: true } });
+    if (!obra) { res.status(404).json({ error: "Obra no encontrada" }); return; }
+
+    const subcontratos = await prisma.subcontratoObra.findMany({
+      where: { obraId },
+      orderBy: { montoPpto: "desc" },
+    });
+
+    res.json(subcontratos);
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Error al obtener subcontratos" });
+  }
+});
+
+// DELETE /api/obras/:id
+router.delete("/:id", async (req: Request, res: Response) => {
+  try {
+    const obraId = req.params.id;
+    const obra = await prisma.obra.findUnique({ where: { id: obraId }, select: { id: true } });
+    if (!obra) { res.status(404).json({ error: "Obra no encontrada" }); return; }
+
+    // Borrar en orden las relaciones sin onDelete: Cascade
+    await prisma.$transaction([
+      // LineaCronograma cascada desde LineaPresupuesto — alcanza con borrar las lineas
+      prisma.lineaPresupuesto.deleteMany({ where: { obraId } }),
+      prisma.presupuestoHeader.deleteMany({ where: { obraId } }),
+      // Partidas scope OBRA (las globales no tocar)
+      prisma.partida.deleteMany({ where: { obraId } }),
+      // El resto (Movimiento, ContratoCliente→Certificacion, SubcontratoObra, Quincena, GastoDirInd)
+      // se borra por cascade al eliminar la obra
+      prisma.obra.delete({ where: { id: obraId } }),
+    ]);
+
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Error al eliminar obra" });
+  }
+});
+
 export default router;

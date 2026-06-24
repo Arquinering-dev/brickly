@@ -51,4 +51,32 @@ router.post(
   },
 );
 
+router.post(
+  "/resumen",
+  upload.single("file"),
+  async (req: Request, res: Response) => {
+    if (!req.file) {
+      res.status(400).json({ error: "No se recibió ningún archivo" });
+      return;
+    }
+
+    const { obraId } = req.body as { obraId?: string };
+    if (!obraId) {
+      res.status(400).json({ error: "obraId es requerido" });
+      return;
+    }
+
+    try {
+      const { importResumenXlsx } = await import("../services/resumen-import.service");
+      const summary = await importResumenXlsx(req.file.buffer, { filename: req.file.originalname });
+      res.json({ summary, warnings: summary.warnings ?? [] });
+    } catch (err) {
+      console.error("[import/resumen]", err);
+      res.status(500).json({
+        error: err instanceof Error ? err.message : "Error interno",
+      });
+    }
+  }
+);
+
 export default router;

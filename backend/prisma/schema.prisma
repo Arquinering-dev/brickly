@@ -120,9 +120,22 @@ model Obra {
   codigo            String             @unique
   fechaInicio       DateTime?
   estado            EstadoObra         @default(EN_PRESUPUESTO)
+  coefGGBB          Decimal?           @db.Decimal(12, 8)
+  mesCacBase        String?
+  valorCacBase      Decimal?           @db.Decimal(14, 2)
+  costoControlable  Decimal?           @db.Decimal(18, 2)
+  precioVentaTotal  Decimal?           @db.Decimal(18, 2)
+  aperturaBlancoP   Decimal?           @db.Decimal(5, 2)
+  aperturaNegrop    Decimal?           @db.Decimal(5, 2)
+  centroCosto       String?
   presupuestos      PresupuestoHeader[]
   lineasPresupuesto LineaPresupuesto[]
   partidas          Partida[]
+  movimientos       Movimiento[]
+  subcontratos      SubcontratoObra[]
+  contratos         ContratoCliente[]
+  quincenas         Quincena[]
+  gastosDirInd      GastoDirInd[]
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 }
@@ -169,6 +182,19 @@ model LineaPresupuesto {
   apuLinkCodigo          String?
   // true si la IA normalizó el nombre del rubro al importar (ej: "H.A." → "Hormigón Armado")
   rubroNormalizado       Boolean           @default(false)
+  costoMtUd              Decimal?          @db.Decimal(18, 2)
+  costoMoOtrUd           Decimal?          @db.Decimal(18, 2)
+  costoMoAlbUd           Decimal?          @db.Decimal(18, 2)
+  costoEqUd              Decimal?          @db.Decimal(18, 2)
+  pvMtUd                 Decimal?          @db.Decimal(18, 2)
+  pvMoOtrUd              Decimal?          @db.Decimal(18, 2)
+  pvMoAlbUd              Decimal?          @db.Decimal(18, 2)
+  pvEqUd                 Decimal?          @db.Decimal(18, 2)
+  pctCertificado         Decimal?          @db.Decimal(8, 6)
+  rubroMt                String?
+  rubroMoOtr             String?
+  rubroMoAlb             String?
+  etapa                  String?
   cronograma             LineaCronograma[]
   avances                AvanceReporte[]
   obra                   Obra              @relation(fields: [obraId], references: [id])
@@ -217,19 +243,169 @@ model LineaCronograma {
 }
 
 // Avance REAL de ejecución reportado en obra (distinto del cronograma previsto).
-// Cada fila es un incremento que carga el jefe de obra desde el celular. El avance acumulado
-// de una tarea = suma de pctIncremento de todas sus filas (clamp a 1.0 = 100%).
 model AvanceReporte {
   id            String           @id @default(uuid())
   lineaId       String
   fecha         DateTime         @default(now())
-  // Incremento de avance de este reporte, fracción [0..1] (ej 0.20 = +20%).
   pctIncremento Decimal          @db.Decimal(8, 6)
-  // Cantidad ejecutada que originó el incremento, si se cargó por cantidad (informativo).
   cantidad      Decimal?         @db.Decimal(14, 4)
   nota          String?
   linea         LineaPresupuesto @relation(fields: [lineaId], references: [id], onDelete: Cascade)
   createdAt     DateTime         @default(now())
 
   @@index([lineaId])
+}
+
+model RubroContable {
+  id          String       @id @default(uuid())
+  codigo      String       @unique
+  nombre      String
+  createdAt   DateTime     @default(now())
+  movimientos Movimiento[]
+}
+
+model IndiceCAC {
+  id          String   @id @default(uuid())
+  mes         DateTime @unique
+  valorIndec  Decimal  @db.Decimal(14, 4)
+  esPrevision Boolean  @default(false)
+  ratio       Decimal? @db.Decimal(12, 8)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model TarifaUOCRA {
+  id        String   @id @default(uuid())
+  mes       DateTime
+  categoria String
+  precioDia Decimal  @db.Decimal(14, 2)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([mes, categoria])
+}
+
+model ContratoCliente {
+  id                  String          @id @default(uuid())
+  obraId              String
+  ocId                String
+  descripcion         String?
+  presupuestoAprobado Decimal         @db.Decimal(18, 2)
+  pctAnticipo         Decimal         @db.Decimal(5, 2) @default(0)
+  mesCacBase          String?
+  indiceCACBase       Decimal?        @db.Decimal(14, 4)
+  pctBlanco           Decimal         @db.Decimal(5, 2) @default(0)
+  pctNegro            Decimal         @db.Decimal(5, 2) @default(0)
+  pctDesacopio        Decimal         @db.Decimal(5, 2) @default(0)
+  pctIVA              Decimal         @db.Decimal(5, 2) @default(0)
+  presupuestoLabel    String?
+  certificaciones     Certificacion[]
+  obra                Obra            @relation(fields: [obraId], references: [id], onDelete: Cascade)
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+  @@unique([obraId, ocId])
+}
+
+model Certificacion {
+  id           String               @id @default(uuid())
+  contratoId   String
+  certId       String
+  fecha        DateTime
+  baseBruta    Decimal              @db.Decimal(18, 2)
+  pctDesacopio Decimal              @db.Decimal(5, 2) @default(0)
+  desacopio    Decimal              @db.Decimal(18, 2) @default(0)
+  subtotalNeto Decimal              @db.Decimal(18, 2)
+  estado       String               @default("emitido")
+  contrato     ContratoCliente      @relation(fields: [contratoId], references: [id], onDelete: Cascade)
+  lineas       CertificacionLinea[]
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+  @@unique([contratoId, certId])
+}
+
+model CertificacionLinea {
+  id               String        @id @default(uuid())
+  certificacionId  String
+  codTarea         String
+  pctAnterior      Decimal       @db.Decimal(8, 6) @default(0)
+  pctActual        Decimal       @db.Decimal(8, 6) @default(0)
+  pctTotal         Decimal       @db.Decimal(8, 6) @default(0)
+  pvTotalTarea     Decimal       @db.Decimal(18, 2)
+  baseCertificada  Decimal       @db.Decimal(18, 2)
+  presupuestoLabel String?
+  certificacion    Certificacion @relation(fields: [certificacionId], references: [id], onDelete: Cascade)
+  createdAt        DateTime      @default(now())
+}
+
+model SubcontratoObra {
+  id           String       @id @default(uuid())
+  obraId       String
+  contratoId   String       @unique
+  proveedor    String
+  rubro        String
+  descripcion  String?
+  montoPpto    Decimal      @db.Decimal(18, 2)
+  ajustaCAC    Boolean      @default(false)
+  pctAnticipo  Decimal?     @db.Decimal(5, 2)
+  pagadoBase   Decimal      @db.Decimal(18, 2) @default(0)
+  pagadoCAC    Decimal      @db.Decimal(18, 2) @default(0)
+  pagadoCS     Decimal      @db.Decimal(18, 2) @default(0)
+  pagadoTotal  Decimal      @db.Decimal(18, 2) @default(0)
+  saldo        Decimal      @db.Decimal(18, 2) @default(0)
+  pctConsumido Decimal?     @db.Decimal(5, 2)
+  estado       String       @default("activo")
+  obra         Obra         @relation(fields: [obraId], references: [id], onDelete: Cascade)
+  movimientos  Movimiento[]
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+}
+
+model Movimiento {
+  id              String           @id @default(uuid())
+  obraId          String
+  cuentaCodigo    String
+  cuentaNombre    String?
+  fecha           DateTime
+  nroAsiento      Int?
+  observaciones   String?
+  proveedor       String?
+  codComprobante  String?
+  nroComprobante  String?
+  debe            Decimal          @db.Decimal(18, 2) @default(0)
+  haber           Decimal          @db.Decimal(18, 2) @default(0)
+  centroCosto     String?
+  subcontratoId   String?
+  movTipo         String?
+  rubroContableId String?
+  obra            Obra             @relation(fields: [obraId], references: [id], onDelete: Cascade)
+  subcontrato     SubcontratoObra? @relation(fields: [subcontratoId], references: [id])
+  rubroContable   RubroContable?   @relation(fields: [rubroContableId], references: [id])
+  createdAt       DateTime         @default(now())
+}
+
+model Quincena {
+  id              String   @id @default(uuid())
+  obraId          String
+  mes             DateTime
+  periodo         String
+  categoria       String
+  rubro           String
+  horasNormales   Decimal  @db.Decimal(10, 2) @default(0)
+  horasExtra50    Decimal  @db.Decimal(10, 2) @default(0)
+  horasExtra100   Decimal  @db.Decimal(10, 2) @default(0)
+  costoTotal      Decimal  @db.Decimal(18, 2) @default(0)
+  costoDeflactado Decimal  @db.Decimal(18, 2) @default(0)
+  obra            Obra     @relation(fields: [obraId], references: [id], onDelete: Cascade)
+  createdAt       DateTime @default(now())
+  @@unique([obraId, mes, periodo, categoria, rubro])
+}
+
+model GastoDirInd {
+  id        String   @id @default(uuid())
+  obraId    String
+  fecha     DateTime
+  tipo      String
+  concepto  String
+  monto     Decimal  @db.Decimal(18, 2)
+  obra      Obra     @relation(fields: [obraId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
 }
