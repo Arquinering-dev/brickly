@@ -271,7 +271,7 @@ function ResumenTab({
                       <p className="text-xs font-semibold text-stone-800">Agregar presupuesto aprobado</p>
                       <p className="text-2xs text-stone-500">Importá el xlsx aprobado con precio venta y cronograma mes a mes.</p>
                     </div>
-                    <Button size="sm" onClick={() => navigate(`/catalogo/presupuestos/nuevo`)}>
+                    <Button size="sm" onClick={() => navigate(`/catalogo/importar?obra=${obra.id}`)}>
                       <Upload /> Importar
                     </Button>
                   </div>
@@ -327,7 +327,7 @@ function ResumenTab({
               <EmptyState
                 icon={Calculator}
                 title="Sin presupuesto"
-                action={<Button size="sm" onClick={() => navigate(`/catalogo/presupuestos/nuevo`)}>Crear presupuesto</Button>}
+                action={<Button size="sm" onClick={() => navigate(`/catalogo/importar?obra=${obra.id}`)}>Importar Resumen de Obra</Button>}
                 className="py-8"
               />
             )}
@@ -468,7 +468,7 @@ function PresupuestoTab({ obraId }: { obraId: string }) {
 
   if (loading) return <div className="py-12 text-center text-stone-400 text-sm">Cargando presupuesto…</div>;
   if (!data || data.rubros.length === 0) {
-    return <EmptyState icon={Calculator} title="Sin presupuesto" description="Importá el APU Unificado de la obra para ver el presupuesto." />;
+    return <EmptyState icon={Calculator} title="Sin presupuesto" description="Importá el Resumen de Obra para ver el presupuesto." />;
   }
 
   return (
@@ -1105,7 +1105,7 @@ function CronogramaTab({ obraId, cronograma }: { obraId: string; cronograma: Cro
       <div className="flex items-center gap-2 p-4 bg-amber-50 border border-amber-100 rounded-xl">
         <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
         <p className="text-xs text-amber-800">
-          Esta obra todavía no tiene cronograma cargado. Importá el APU Unificado con la hoja PPTO_APROBADO (precio de venta + meses).
+          Esta obra todavía no tiene cronograma cargado. Importá el Resumen de Obra con las columnas de meses en 1_Presupuesto.
         </p>
       </div>
     );

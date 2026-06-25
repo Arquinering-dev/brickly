@@ -105,7 +105,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         <NavGroup label="Catálogo" defaultOpen={inCatalogo}>
           <NavItem to="/catalogo/partidas" icon={FileText} label="Partidas APU" onNavigate={onNavigate} />
           <NavItem to="/catalogo/insumos" icon={Package} label="Insumos" onNavigate={onNavigate} />
-          <NavItem to="/catalogo/importar" icon={Upload} label="Importar APU" onNavigate={onNavigate} />
+          <NavItem to="/catalogo/importar" icon={Upload} label="Importar Resumen" onNavigate={onNavigate} />
         </NavGroup>
       </nav>
 

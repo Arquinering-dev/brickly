@@ -104,9 +104,9 @@ export default function DashboardPage() {
             {data.obras.length} obras en cartera · {fmtDate(new Date(), "long")}
           </p>
         </div>
-        <Button onClick={() => navigate("/catalogo/presupuestos/nuevo")} size="md">
+        <Button onClick={() => navigate("/obras")} size="md">
           <Plus />
-          Nuevo presupuesto
+          Nueva obra
         </Button>
       </div>
 
@@ -154,10 +154,10 @@ export default function DashboardPage() {
             <EmptyState
               icon={Building2}
               title="No hay obras todavía"
-              description="Creá un presupuesto para empezar a gestionar una obra."
+              description="Creá una obra para empezar a gestionarla."
               action={
-                <Button onClick={() => navigate("/catalogo/presupuestos/nuevo")}>
-                  <Plus /> Nuevo presupuesto
+                <Button onClick={() => navigate("/obras")}>
+                  <Plus /> Nueva obra
                 </Button>
               }
             />

@@ -76,7 +76,7 @@ export function CronogramaEditor({ obraId, onClose }: { obraId: string; onClose:
     return (
       <div className="space-y-4">
         <div className="p-4 bg-amber-50 border border-amber-100 rounded-xl text-xs text-amber-800">
-          Esta obra no tiene meses de cronograma para editar. Importá el APU Unificado con la hoja PPTO_APROBADO primero.
+          Esta obra no tiene meses de cronograma para editar. Importá el Resumen de Obra (con las columnas de meses en 1_Presupuesto) primero.
         </div>
         <Button variant="outline" size="sm" onClick={() => onClose(false)}>Volver</Button>
       </div>

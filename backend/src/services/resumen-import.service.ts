@@ -18,6 +18,8 @@ import * as XLSX from "xlsx";
 import prisma from "../prisma/client";
 import { categorizeAndPersist } from "./ai/categorizer";
 import { isGeminiConfigured } from "./ai/gemini.client";
+import { parseResumenObra } from "./resumen-parser.service";
+import { persistControlObra, type ControlSummary } from "./control-import.service";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -109,6 +111,7 @@ export type ResumenImportResult = {
   iccPuntos: number;
   cronogramaFilas: number;
   categorizadas?: number;
+  control: ControlSummary;
   obraId?: string;
   presupuestoHeaderId?: string;
   warnings: string[];
@@ -450,10 +453,16 @@ async function bulkUpsertPartidas(partidas: PartidaData[]): Promise<void> {
 
 export async function importResumenXlsx(
   buf: Buffer,
-  opts: { dryRun?: boolean; filename?: string } = {},
+  opts: { dryRun?: boolean; filename?: string; obraId?: string } = {},
 ): Promise<ResumenImportResult> {
-  const { dryRun = false, filename } = opts;
+  const { dryRun = false, filename, obraId: targetObraId } = opts;
   const wb = XLSX.read(buf, { type: "buffer", cellDates: true });
+
+  // Parser del control financiero (movimientos, subcontratos, quincenas, gastos, certificaciones,
+  // rubros, índices). Aporta además los costos/rubros granulares por línea que la vista de control
+  // necesita y que el parse de 1_Presupuesto de acá no captura.
+  const extra = parseResumenObra(buf);
+  const extraByItem = new Map(extra.lineasPresupuesto.map((l) => [l.itemNumero, l]));
 
   // 1. Parsear hojas ────────────────────────────────────────────────────────
   const config = parseConfig(readSheet(wb, "0_CONFIG", true));
@@ -493,9 +502,25 @@ export async function importResumenXlsx(
   if (coefGGBB <= 1) warnings.push("Coeficiente K (GGBB) ≤ 1 — revisar 1_Presupuesto!P2 / 0_CONFIG");
   const sinComp = lineas.filter((l) => !l.apuLinkCodigo).length;
   if (sinComp > 0) warnings.push(`${sinComp} tareas sin composición APU (no cotizan / globales / subcontratos)`);
+  // Warnings del parser de control (hojas faltantes, filas inválidas, etc.)
+  warnings.push(...extra.warnings);
 
   const porTipo: Record<string, number> = {};
   for (const ins of insumos) porTipo[ins.tipo] = (porTipo[ins.tipo] ?? 0) + 1;
+
+  // Conteo del control financiero (se previsualiza en dry-run; se confirma al persistir).
+  const controlPreview: ControlSummary = {
+    rubros: extra.rubros.length,
+    indicesCAC: extra.indicesCAC.length,
+    tarifasUOCRA: extra.tarifasUOCRA.length,
+    movimientos: extra.movimientos.length,
+    subcontratos: extra.subcontratos.length,
+    quincenas: extra.quincenas.length,
+    gastosDirInd: extra.gastosDirInd.length,
+    contratos: extra.contratos.length,
+    certificaciones: extra.certificaciones.length,
+    lineasCert: extra.lineasCert.length,
+  };
 
   const result: ResumenImportResult = {
     obra: { nombre: obraNombre, codigo: obraCodigo, estado: config.estado },
@@ -508,6 +533,7 @@ export async function importResumenXlsx(
     } : null,
     iccPuntos: iccPuntos.length,
     cronogramaFilas,
+    control: controlPreview,
     warnings, errors, dryRun,
   };
 
@@ -566,11 +592,29 @@ export async function importResumenXlsx(
   }
 
   // 5. Obra + Presupuesto ─────────────────────────────────────────────────────
-  const obra = await prisma.obra.upsert({
-    where: { codigo: obraCodigo },
-    create: { codigo: obraCodigo, nombre: obraNombre, estado: config.estado, fechaInicio: config.fechaInicio },
-    update: { nombre: obraNombre, estado: config.estado, fechaInicio: config.fechaInicio },
-  });
+  // Campos derivados del Excel que enriquecen la obra (config + totales del presupuesto).
+  const obraData = {
+    estado: config.estado,
+    fechaInicio: config.fechaInicio,
+    coefGGBB,
+    mesCacBase: config.mesCacLabel || extra.config.mesCacBase || null,
+    valorCacBase: config.cacValorBase || extra.config.valorCacBase || null,
+    costoControlable: extra.config.costoControlable ?? cdTotal,
+    precioVentaTotal: extra.config.precioVentaTotal ?? pvTotal,
+    ...(extra.config.aperturaBlancoP != null ? { aperturaBlancoP: extra.config.aperturaBlancoP } : {}),
+    ...(extra.config.aperturaNegrop != null ? { aperturaNegrop: extra.config.aperturaNegrop } : {}),
+    ...(extra.config.centroCosto ? { centroCosto: extra.config.centroCosto } : {}),
+  };
+
+  // Si se importa apuntando a una obra ya creada (flujo "crear obra → importar resumen"),
+  // se respeta su nombre/código y solo se enriquecen los datos. Si no, upsert por código.
+  const obra = targetObraId
+    ? await prisma.obra.update({ where: { id: targetObraId }, data: obraData })
+    : await prisma.obra.upsert({
+        where: { codigo: obraCodigo },
+        create: { codigo: obraCodigo, nombre: obraNombre, ...obraData },
+        update: { nombre: obraNombre, ...obraData },
+      });
   result.obraId = obra.id;
 
   // Reemplazar TODOS los headers previos de la obra (APU viejos incluidos) — import idempotente
@@ -604,6 +648,9 @@ export async function importResumenXlsx(
   await prisma.lineaPresupuesto.createMany({
     data: lineas.map((l) => {
       const partidaId = l.apuLinkCodigo ? (apuPartidaMap.get(l.apuLinkCodigo) ?? null) : null;
+      // Costos/rubros/cert granulares desde el parser de control (matcheados por itemNumero).
+      // Los consume la vista de control financiero (desvío por rubro, avance físico).
+      const g = extraByItem.get(l.itemNumero);
       return {
         obraId: obra.id, presupuestoHeaderId: header.id,
         partidaId,
@@ -619,6 +666,20 @@ export async function importResumenXlsx(
         fuente: l.apuLinkCodigo ? "APU" : "PRESUPUESTO",
         apuLinkCodigo: l.apuLinkCodigo,
         tipo: "APU" as const,
+        // Granular (control financiero)
+        costoMtUd: g?.costoMtUd || null,
+        costoMoOtrUd: g?.costoMoOtrUd || null,
+        costoMoAlbUd: g?.costoMoAlbUd || null,
+        costoEqUd: g?.costoEqUd || null,
+        pvMtUd: g?.pvMtUd || null,
+        pvMoOtrUd: g?.pvMoOtrUd || null,
+        pvMoAlbUd: g?.pvMoAlbUd || null,
+        pvEqUd: g?.pvEqUd || null,
+        pctCertificado: g?.pctCertificado ? Math.min(99.999999, g.pctCertificado) : null,
+        rubroMt: g?.rubroMt || null,
+        rubroMoOtr: g?.rubroMoOtr || null,
+        rubroMoAlb: g?.rubroMoAlb || null,
+        etapa: g?.etapa || null,
       };
     }),
   });
@@ -644,6 +705,14 @@ export async function importResumenXlsx(
       await prisma.lineaCronograma.createMany({ data: cronoData.slice(i, i + CR_BATCH), skipDuplicates: true });
     }
     result.cronogramaFilas = cronoData.length;
+  }
+
+  // 7. Control financiero (movimientos, subcontratos, quincenas, gastos, certificaciones) ──
+  try {
+    result.control = await persistControlObra(prisma, obra.id, extra);
+  } catch (err) {
+    // El control es complementario: si algo falla, el import del presupuesto ya quedó hecho.
+    warnings.push(`Control financiero parcial: ${(err as Error).message}`);
   }
 
   return result;

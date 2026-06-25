@@ -1,6 +1,6 @@
 /**
  * PresupuestoPage — solo lectura.
- * Los presupuestos se generan al importar el APU Unificado.
+ * Los presupuestos se generan al importar el Resumen de Obra.
  */
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -110,7 +110,7 @@ function NuevoPresupuesto() {
         ← Volver
       </button>
       <h1 className="text-2xl font-black text-stone-900 mb-1">Nuevo presupuesto</h1>
-      <p className="text-sm text-stone-500 mb-6">Crea un presupuesto vacío. Para importar desde Excel usá <button onClick={() => navigate("/catalogo/importar")} className="underline text-brand-600">Importar APU</button>.</p>
+      <p className="text-sm text-stone-500 mb-6">Crea un presupuesto vacío. Para importar desde Excel usá <button onClick={() => navigate("/catalogo/importar")} className="underline text-brand-600">Importar Resumen de Obra</button>.</p>
 
       <form onSubmit={handleSubmit} className="space-y-4 bg-white border border-stone-200 rounded-2xl p-6">
         <div>
@@ -198,7 +198,7 @@ function PresupuestoLista() {
         <div>
           <h1 className="text-2xl font-black text-stone-900">Presupuestos</h1>
           <p className="text-sm text-stone-500 mt-0.5">
-            Generados al importar el APU Unificado.
+            Generados al importar el Resumen de Obra.
           </p>
         </div>
         <button
@@ -206,7 +206,7 @@ function PresupuestoLista() {
           className="inline-flex items-center gap-2 px-4 py-2.5 bg-brand-500 text-white rounded-lg text-sm font-semibold hover:bg-brand-600 shadow-sm"
         >
           <Upload className="h-4 w-4" />
-          Importar APU
+          Importar Resumen
         </button>
       </div>
 
@@ -220,7 +220,7 @@ function PresupuestoLista() {
             className="inline-flex items-center gap-2 px-4 py-2 bg-brand-500 text-white rounded-lg text-sm font-semibold hover:bg-brand-600"
           >
             <Upload className="h-4 w-4" />
-            Importar APU Unificado
+            Importar Resumen de Obra
           </button>
         </div>
       ) : (

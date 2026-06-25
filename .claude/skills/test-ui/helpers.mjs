@@ -11,7 +11,7 @@ export const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
 export const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:3000";
 export const DEFAULT_EMAIL = "arquinering@gmail.com";
 export const DEFAULT_PASSWORD = "arquinering";
-export const SAMPLE_XLSX = "/Users/pablopagliaricci/Downloads/APU_Unificado_GDR3760_VF.xlsx";
+export const SAMPLE_XLSX = "/Users/pablopagliaricci/Downloads/CH_2171_Resumen_de_Obra_v8_11.xlsx";
 const REPO_ROOT = resolve("/Users/pablopagliaricci/brickly");
 
 // ─── Service health & auto-start ──────────────────────────────────────────────
@@ -175,9 +175,16 @@ export async function login(page, email = DEFAULT_EMAIL, password = DEFAULT_PASS
 }
 
 export async function uploadXlsx(page, filePath = SAMPLE_XLSX) {
-  // Navigate to import page (adjust route if needed)
-  await page.goto(`${FRONTEND_URL}/import`, { waitUntil: "domcontentloaded" }).catch(() => {});
+  // Importar el Resumen de Obra. El flujo requiere una obra destino seleccionada antes de subir.
+  await page.goto(`${FRONTEND_URL}/catalogo/importar`, { waitUntil: "domcontentloaded" }).catch(() => {});
   await page.waitForLoadState("networkidle", { timeout: 5000 }).catch(() => {});
+  // Elegir la primera obra disponible en el selector (si no hay, creá una con NuevaObraDialog antes).
+  const select = page.locator("select").first();
+  await select.waitFor({ timeout: 5000 }).catch(() => {});
+  const optionValues = await select.locator("option").evaluateAll(
+    (opts) => opts.map((o) => o.value).filter((v) => v),
+  ).catch(() => []);
+  if (optionValues.length) await select.selectOption(optionValues[0]);
   const fileInput = page.locator('input[type="file"]').first();
   await fileInput.setInputFiles(filePath);
 }

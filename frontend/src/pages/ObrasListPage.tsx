@@ -10,6 +10,7 @@ import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { EmptyState } from "../components/ui/empty";
 import { Skeleton } from "../components/ui/skeleton";
+import { NuevaObraDialog } from "../components/NuevaObraDialog";
 
 interface ObraResumen {
   id: string;
@@ -35,6 +36,7 @@ export default function ObrasListPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [estado, setEstado] = useState<"" | "EN_PRESUPUESTO" | "EN_CURSO" | "FINALIZADA">("");
+  const [nuevaOpen, setNuevaOpen] = useState(false);
 
   useEffect(() => {
     apiFetch("/api/dashboard")
@@ -62,8 +64,8 @@ export default function ObrasListPage() {
           <h1 className="text-2xl font-black text-stone-900 tracking-tight">Obras</h1>
           <p className="text-sm text-stone-500 mt-1">{obras.length} obras en cartera</p>
         </div>
-        <Button onClick={() => navigate("/catalogo/presupuestos/nuevo")}>
-          <Plus /> Crear obra desde presupuesto
+        <Button onClick={() => setNuevaOpen(true)}>
+          <Plus /> Nueva obra
         </Button>
       </div>
 
@@ -108,8 +110,8 @@ export default function ObrasListPage() {
           title={obras.length === 0 ? "No hay obras todavía" : "Sin resultados"}
           description={obras.length === 0 ? "Empezá creando un presupuesto para tu primera obra." : "Probá con otro filtro o término de búsqueda."}
           action={obras.length === 0 ? (
-            <Button onClick={() => navigate("/catalogo/presupuestos/nuevo")}>
-              <Plus /> Nuevo presupuesto
+            <Button onClick={() => setNuevaOpen(true)}>
+              <Plus /> Nueva obra
             </Button>
           ) : undefined}
         />
@@ -120,6 +122,12 @@ export default function ObrasListPage() {
           ))}
         </div>
       )}
+
+      <NuevaObraDialog
+        open={nuevaOpen}
+        onOpenChange={setNuevaOpen}
+        onCreated={(obra) => navigate(`/catalogo/importar?obra=${obra.id}`)}
+      />
     </div>
   );
 }

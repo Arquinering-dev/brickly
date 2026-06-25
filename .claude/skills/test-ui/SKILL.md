@@ -32,7 +32,7 @@ Import from `/Users/pablopagliaricci/brickly/.claude/skills/test-ui/helpers.mjs`
 - `ensureServices()` — **call first in every script**. Checks frontend + backend + DB; starts any that are down. Throws if a service can't be brought up.
 - `launch({ headless })` → `{ browser, context, page, logs }` (logs collects console + network 4xx/5xx + page errors)
 - `login(page, email?, password?)` — defaults: `arquinering@gmail.com` / `arquinering`
-- `uploadXlsx(page, filePath?)` — defaults to `/Users/pablopagliaricci/Downloads/APU_Unificado_GDR3760_VF.xlsx`
+- `uploadXlsx(page, filePath?)` — va a `/catalogo/importar`, elige la primera obra del selector y sube el Resumen de Obra (default `/Users/pablopagliaricci/Downloads/CH_2171_Resumen_de_Obra_v8_11.xlsx`)
 - `snapshot(page, name, logs)` — screenshot + logs to `/tmp/test-ui/`
 - `finish(browser, page, logs, name)` — snapshot then close browser
 - Constants: `FRONTEND_URL`, `BACKEND_URL`, `SAMPLE_XLSX`

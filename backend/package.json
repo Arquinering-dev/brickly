@@ -11,7 +11,7 @@
     "env:docker": "cp .env.docker .env && echo 'Now using LOCAL DOCKER db'",
     "env:supabase": "cp .env.supabase .env && echo 'Now using SUPABASE db'",
     "create-user": "tsx scripts/create-user.ts",
-    "seed:apu": "tsx scripts/seed-apu.ts"
+    "import:dry": "tsx scripts/test-import-dry.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

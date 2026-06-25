@@ -44,7 +44,7 @@ brickly/
 │   ├── prisma/
 │   │   ├── schema.prisma
 │   │   └── migrations/
-│   ├── scripts/       # seed-apu.ts, verify-apu.ts, create-user.ts
+│   ├── scripts/       # create-user.ts, test-import-dry.ts, test-import-live.ts
 │   └── Dockerfile     # Para Railway
 ```
 
@@ -81,24 +81,42 @@ TipoPresupuesto: GENERADOR | APROBADO
 ## Importación de datos — Resumen de Obra
 
 El formato de Excel que se importa es el **"Resumen de Obra"** de Arquinering (v8+). Entra por
-`POST /api/import/apu` (`?dry=1` para preview). Lógica en
-`backend/src/services/resumen-import.service.ts` (`importResumenXlsx`).
+`POST /api/import/resumen` (`?dry=1` para preview). Lógica en
+`backend/src/services/resumen-import.service.ts` (`importResumenXlsx`), que además invoca
+`resumen-parser.service.ts` (`parseResumenObra`, hojas extra) y `control-import.service.ts`
+(`persistControlObra`, persistencia del control financiero).
 
-> El importador viejo del **APU_Unificado** (`apu-import.service.ts`) fue eliminado. El historial
-> de ese formato vive en git si hace falta.
+> Flujo en la web: **crear la obra primero** (botón "Nueva obra" → form manual con nombre/código/
+> estado/fecha/centro de costo) y **después importar el Resumen** apuntando a esa obra (`obraId`).
+> El import respeta el nombre/código que puso el usuario y solo enriquece el resto. Si no se pasa
+> `obraId`, la obra se crea/actualiza derivando el código del nombre de archivo (compatibilidad).
+>
+> El importador viejo del **APU_Unificado** (`apu-import.service.ts`) fue eliminado, junto con sus
+> scripts (`seed-apu`, `verify-apu`, `validate-parser`, `inject-aprobado`). El historial vive en git.
 
-Hojas que consume (solo estas cuatro):
+Hojas que consume:
 
 | Hoja | → DB | Descripción |
 |------|------|-------------|
-| `0_CONFIG` | `Obra` + `PresupuestoHeader` | label/valor: nombre, estado, **Valor CAC base** → `cacValor`, **Mes base CAC**, **K** → `coefGGBB`, fecha inicio |
-| `0_Indice_CAC` | `IndiceICC` | Serie mensual del ICC (valores absolutos reales INDEC). Omite proyecciones y meses futuros |
+| `0_CONFIG` | `Obra` + `PresupuestoHeader` | nombre, estado, **Valor CAC base** → `cacValor`, **Mes base CAC**, **K** → `coefGGBB`, fecha inicio, costo controlable, PV total, % blanco/negro, centro de costo |
+| `0_Indice_CAC` | `IndiceICC` + `IndiceCAC` | Serie mensual del ICC (valores absolutos reales INDEC). Omite proyecciones y meses futuros |
+| `0_Jornales_MO` | `TarifaUOCRA` | Tarifas de jornal por categoría y mes |
 | `1_Composicion` | `Insumo` + `Partida` + `Composicion` | Deriva insumos (dedup por código) y partidas. Col 17 `Cod_Item_Ppto` linkea cada partida con su ítem de presupuesto |
-| `1_Presupuesto` | `LineaPresupuesto` | Tareas con costos (MT/MO-OTR/MO-ALB/EQ por ud), CD/ud y **precio de venta unitario real** (col 15) |
+| `1_Presupuesto` | `LineaPresupuesto` | Tareas con costos (MT/MO-OTR/MO-ALB/EQ por ud + rubros granulares + % certificado), CD/ud y **precio de venta unitario real** (col 15) |
+| `_Listas` | `RubroContable` | Catálogo de cuentas contables (linkea movimientos por código) |
+| `2_Movimientos` | `Movimiento` | Asientos contables (debe/haber) linkeados a rubro y subcontrato |
+| `2_Subcontratos` | `SubcontratoObra` | Subcontratos con monto, pagado y saldo |
+| `2_Quincenas` | `Quincena` | Horas y costo de MO por quincena |
+| `2_Gastos_DirInd` | `GastoDirInd` | Gastos directos/indirectos |
+| `Cert_OC_Cliente` / `Cert_Cabecera` / `Cert_App_Output` | `ContratoCliente` + `Certificacion` + `CertificacionLinea` | Contratos del cliente y certificaciones emitidas |
+
+Estas tablas de "control financiero" alimentan la vista `/obras/:id/control` (KPIs: desvío por
+rubro, margen, flujo de caja, certificación). Se borran y recrean por obra en cada import
+(idempotente); los catálogos globales (`RubroContable`, `IndiceCAC`, `TarifaUOCRA`) se upsertean.
 
 Detalles clave:
-- **Código de obra** se deriva del nombre de archivo (`CH_2171_Resumen…` → `CH2171`) para no
-  duplicar obras existentes.
+- **Código de obra** (cuando NO se pasa `obraId`) se deriva del nombre de archivo
+  (`CH_2171_Resumen…` → `CH2171`) para no duplicar obras existentes.
 - Crea **un** `PresupuestoHeader` (tipo `APROBADO`, `estado=vigente`) y reemplaza todos los headers
   previos de la obra (import idempotente). Las vistas eligen header por `estado=vigente` + más
   reciente, no por tipo.

@@ -1,11 +1,13 @@
 /**
- * POST /api/import/apu?dry=1   → preview (no escribe en DB)
- * POST /api/import/apu         → importa definitivamente
+ * POST /api/import/resumen            → importa el Resumen de Obra a una obra existente
+ * POST /api/import/resumen?dry=1      → preview (no escribe en DB)
  *
- * Consume el "Resumen de Obra" de Arquinering (hojas 0_CONFIG, 0_Indice_CAC,
- * 1_Composicion, 1_Presupuesto). Reemplazó al importador del APU_Unificado.
+ * Consume el "Resumen de Obra" de Arquinering (formato v8): presupuesto, composición, ICC y el
+ * control financiero (movimientos, subcontratos, quincenas, gastos, certificaciones).
  *
- * Body: multipart/form-data, campo "file" con el .xlsx
+ * Body: multipart/form-data — campo "file" con el .xlsx y "obraId" con la obra destino.
+ * El obraId es opcional: si no se envía, la obra se crea/actualiza derivando el código del
+ * nombre de archivo (compatibilidad). El flujo recomendado es crear la obra primero y pasar su id.
  */
 import { Router, Request, Response } from "express";
 import multer from "multer";
@@ -15,7 +17,7 @@ const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
 router.post(
-  "/apu",
+  "/resumen",
   upload.single("file"),
   async (req: Request, res: Response) => {
     if (!req.file) {
@@ -24,9 +26,14 @@ router.post(
     }
 
     const dryRun = req.query.dry === "1" || req.query.dry === "true";
+    const { obraId } = req.body as { obraId?: string };
 
     try {
-      const result = await importResumenXlsx(req.file.buffer, { dryRun, filename: req.file.originalname });
+      const result = await importResumenXlsx(req.file.buffer, {
+        dryRun,
+        filename: req.file.originalname,
+        obraId: obraId || undefined,
+      });
 
       if (!dryRun && result.errors.length > 0) {
         res.status(422).json({
@@ -37,46 +44,16 @@ router.post(
       }
 
       res.json({
-        message: dryRun
-          ? "Preview OK — nada fue guardado"
-          : "Importación completada",
+        message: dryRun ? "Preview OK — nada fue guardado" : "Importación completada",
         ...result,
       });
     } catch (err) {
-      console.error("[import/apu]", err);
+      console.error("[import/resumen]", err);
       res.status(500).json({
         error: err instanceof Error ? err.message : "Error al importar el archivo",
       });
     }
   },
-);
-
-router.post(
-  "/resumen",
-  upload.single("file"),
-  async (req: Request, res: Response) => {
-    if (!req.file) {
-      res.status(400).json({ error: "No se recibió ningún archivo" });
-      return;
-    }
-
-    const { obraId } = req.body as { obraId?: string };
-    if (!obraId) {
-      res.status(400).json({ error: "obraId es requerido" });
-      return;
-    }
-
-    try {
-      const { importResumenXlsx } = await import("../services/resumen-import.service");
-      const summary = await importResumenXlsx(req.file.buffer, { filename: req.file.originalname });
-      res.json({ summary, warnings: summary.warnings ?? [] });
-    } catch (err) {
-      console.error("[import/resumen]", err);
-      res.status(500).json({
-        error: err instanceof Error ? err.message : "Error interno",
-      });
-    }
-  }
 );
 
 export default router;
