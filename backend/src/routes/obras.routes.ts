@@ -18,23 +18,48 @@ router.get("/", async (_req: Request, res: Response) => {
   }
 });
 
+const ESTADOS_OBRA = ["EN_PRESUPUESTO", "EN_CURSO", "FINALIZADA"] as const;
+
+// Normaliza el código igual que lo deriva el importador del Resumen (deriveObraCodigo):
+// mayúsculas, sin espacios ni símbolos. Así una obra creada a mano matchea el archivo que se
+// importe después.
+function normalizeCodigo(raw: string): string {
+  return raw.replace(/[^a-z0-9]/gi, "").toUpperCase();
+}
+
 router.post("/", async (req: Request, res: Response) => {
   try {
-    const { nombre, codigo, fechaInicio, estado } = req.body;
-    if (!nombre || !codigo) {
+    const { nombre, codigo, fechaInicio, estado, centroCosto } = req.body as {
+      nombre?: string; codigo?: string; fechaInicio?: string; estado?: string; centroCosto?: string;
+    };
+
+    const nombreLimpio = nombre?.trim();
+    const codigoLimpio = codigo ? normalizeCodigo(codigo) : "";
+    if (!nombreLimpio || !codigoLimpio) {
       res.status(400).json({ error: "nombre y codigo son requeridos" });
       return;
     }
+    if (estado && !ESTADOS_OBRA.includes(estado as (typeof ESTADOS_OBRA)[number])) {
+      res.status(400).json({ error: `estado inválido (esperado: ${ESTADOS_OBRA.join(", ")})` });
+      return;
+    }
+
     const obra = await prisma.obra.create({
       data: {
-        nombre,
-        codigo,
+        nombre: nombreLimpio,
+        codigo: codigoLimpio,
         fechaInicio: fechaInicio ? new Date(fechaInicio) : null,
-        estado: estado ?? "EN_PRESUPUESTO",
+        estado: (estado as (typeof ESTADOS_OBRA)[number]) ?? "EN_PRESUPUESTO",
+        centroCosto: centroCosto?.trim() || null,
       },
     });
     res.status(201).json(obra);
   } catch (err) {
+    // Código duplicado (@unique) → 409 para que el front muestre un mensaje claro
+    if (err && typeof err === "object" && (err as { code?: string }).code === "P2002") {
+      res.status(409).json({ error: "Ya existe una obra con ese código" });
+      return;
+    }
     res.status(500).json({ error: err instanceof Error ? err.message : "Error interno" });
   }
 });
