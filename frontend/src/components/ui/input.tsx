@@ -7,10 +7,10 @@ export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttribute
       ref={ref}
       type={type}
       className={cn(
-        "flex h-9 w-full rounded-lg border border-stone-200 bg-white px-3 py-1 text-sm shadow-xs",
-        "placeholder:text-stone-400",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/40 focus-visible:border-brand-400",
-        "disabled:cursor-not-allowed disabled:opacity-50 disabled:bg-stone-50",
+        "flex h-9 w-full rounded border border-slate-200 bg-white px-3 py-1 text-sm shadow-xs",
+        "placeholder:text-slate-400",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/30 focus-visible:border-brand-500",
+        "disabled:cursor-not-allowed disabled:opacity-50 disabled:bg-slate-50",
         "transition-colors",
         className
       )}
@@ -25,9 +25,9 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, React.TextareaHTML
     <textarea
       ref={ref}
       className={cn(
-        "flex min-h-[80px] w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm shadow-xs",
-        "placeholder:text-stone-400",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/40 focus-visible:border-brand-400",
+        "flex min-h-[80px] w-full rounded border border-slate-200 bg-white px-3 py-2 text-sm shadow-xs",
+        "placeholder:text-slate-400",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/30 focus-visible:border-brand-500",
         "disabled:cursor-not-allowed disabled:opacity-50",
         className
       )}
@@ -41,7 +41,7 @@ export const Label = React.forwardRef<HTMLLabelElement, React.LabelHTMLAttribute
   ({ className, ...props }, ref) => (
     <label
       ref={ref}
-      className={cn("text-xs font-medium text-stone-600 mb-1 block", className)}
+      className={cn("text-xs font-medium text-slate-600 mb-1 block", className)}
       {...props}
     />
   )

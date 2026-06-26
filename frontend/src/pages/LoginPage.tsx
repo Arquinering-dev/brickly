@@ -40,19 +40,19 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-brand-50 via-stone-50 to-brand-100/40 flex items-center justify-center px-4 relative overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-brand-900 via-brand-800 to-brand-700 flex items-center justify-center px-4 relative overflow-hidden">
       {/* Decorative shapes */}
-      <div className="absolute -top-32 -right-32 h-96 w-96 rounded-full bg-brand-200/30 blur-3xl" />
-      <div className="absolute -bottom-32 -left-32 h-96 w-96 rounded-full bg-brand-300/20 blur-3xl" />
+      <div className="absolute -top-32 -right-32 h-96 w-96 rounded-full bg-accent-500/10 blur-3xl" />
+      <div className="absolute -bottom-32 -left-32 h-96 w-96 rounded-full bg-brand-500/20 blur-3xl" />
 
       <div className="w-full max-w-sm relative">
-        <div className="bg-white rounded-3xl shadow-lg border border-stone-200/70 p-8 backdrop-blur-sm">
+        <div className="bg-white rounded-xl shadow-lg border border-slate-200/70 p-8 backdrop-blur-sm">
           <div className="flex flex-col items-center mb-8">
-            <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-brand-600 to-brand-900 grid place-items-center mb-4 shadow-md shadow-brand-900/20">
+            <div className="h-14 w-14 rounded-lg bg-gradient-to-br from-accent-500 to-accent-700 grid place-items-center mb-4 shadow-md shadow-brand-900/30">
               <HardHat className="h-6 w-6 text-white" />
             </div>
-            <h1 className="text-xl font-black text-stone-900 tracking-tight">Groundwork</h1>
-            <p className="text-xs text-stone-500 mt-1">Arquinering · Control de Obra</p>
+            <h1 className="text-xl font-bold text-slate-900 tracking-tight font-display">Groundwork</h1>
+            <p className="text-xs text-slate-500 mt-1">Arquinering · Control de Obra</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -91,7 +91,7 @@ export default function LoginPage() {
             </Button>
           </form>
         </div>
-        <p className="text-center text-2xs text-stone-400 mt-6 tracking-wider">
+        <p className="text-center text-2xs text-brand-200/50 mt-6 tracking-wider">
           ARQUINERING S.R.L.
         </p>
       </div>
