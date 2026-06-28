@@ -4,23 +4,24 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "../../lib/cn";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
-        default: "bg-brand-700 text-white shadow-sm hover:bg-brand-800 active:bg-brand-900",
-        primary: "bg-brand-600 text-white shadow-sm hover:bg-brand-700 active:bg-brand-800",
-        secondary: "bg-stone-100 text-stone-900 hover:bg-stone-200",
-        outline: "border border-stone-200 bg-white text-stone-700 hover:bg-stone-50 hover:border-stone-300",
-        ghost: "text-stone-700 hover:bg-stone-100",
+        default:     "bg-brand-700 text-white shadow-sm hover:bg-brand-800 active:bg-brand-900",
+        primary:     "bg-brand-700 text-white shadow-sm hover:bg-brand-800 active:bg-brand-900",
+        accent:      "bg-accent-500 text-white shadow-sm hover:bg-accent-600 active:bg-accent-700",
+        secondary:   "bg-slate-100 text-slate-800 hover:bg-slate-200 active:bg-slate-300",
+        outline:     "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300",
+        ghost:       "text-slate-700 hover:bg-slate-100",
         destructive: "bg-danger-500 text-white shadow-sm hover:bg-danger-600",
-        link: "text-brand-600 underline-offset-4 hover:underline p-0 h-auto",
+        link:        "text-brand-600 underline-offset-4 hover:underline p-0 h-auto",
       },
       size: {
-        sm: "h-8 px-3 text-xs",
-        md: "h-9 px-4",
-        lg: "h-10 px-5",
-        icon: "h-9 w-9 p-0",
+        sm:       "h-8 px-3 text-xs",
+        md:       "h-9 px-4",
+        lg:       "h-10 px-5",
+        icon:     "h-9 w-9 p-0",
         "icon-sm": "h-7 w-7 p-0 [&_svg]:size-3.5",
       },
     },

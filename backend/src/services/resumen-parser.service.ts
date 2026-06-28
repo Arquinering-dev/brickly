@@ -475,7 +475,7 @@ function parseSubcontratos(wb: XLSX.WorkBook, warnings: string[]): ParsedResumen
     const row = rows[i];
     if (!row) continue;
     const contratoId = safeStr(row[0]);
-    if (!contratoId) continue;
+    if (!contratoId || contratoId === "Contrato#") continue;
 
     try {
       const ajustaCACRaw = row[5];
