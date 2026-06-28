@@ -197,6 +197,7 @@ model LineaPresupuesto {
   etapa                  String?
   cronograma             LineaCronograma[]
   avances                AvanceReporte[]
+  certificacionLineas    CertificacionLinea[]
   obra                   Obra              @relation(fields: [obraId], references: [id])
   presupuestoHeader      PresupuestoHeader @relation(fields: [presupuestoHeaderId], references: [id])
   partida                Partida?          @relation(fields: [partidaId], references: [id])
@@ -298,6 +299,9 @@ model ContratoCliente {
   pctDesacopio        Decimal         @db.Decimal(5, 2) @default(0)
   pctIVA              Decimal         @db.Decimal(5, 2) @default(0)
   presupuestoLabel    String?
+  // 'import' = creado desde el Resumen de Obra (se borra y recrea en cada import);
+  // 'app'    = contrato sintético para certificaciones armadas desde la web (el import NO lo toca).
+  fuente              String          @default("import")
   certificaciones     Certificacion[]
   obra                Obra            @relation(fields: [obraId], references: [id], onDelete: Cascade)
   createdAt           DateTime        @default(now())
@@ -315,6 +319,18 @@ model Certificacion {
   desacopio    Decimal              @db.Decimal(18, 2) @default(0)
   subtotalNeto Decimal              @db.Decimal(18, 2)
   estado       String               @default("emitido")
+  // 'import' = importada del Resumen; 'app' = armada desde la web a partir del avance reportado.
+  fuente       String               @default("import")
+  // Período certificado (solo certs de app). Mes 1-12.
+  periodoMes   Int?
+  periodoAnio  Int?
+  nota         String?
+  // Inputs de la valorización formal (etapa 'valorizada'); null hasta que se valoriza.
+  // El desglose (CAC / facturable-no-facturable / IVA) se computa de estos + subtotalNeto.
+  pctFacturable  Decimal? @db.Decimal(6, 4)  // fracción facturable; resto = no facturable
+  pctIva         Decimal? @db.Decimal(6, 4)  // IVA sobre el componente facturable
+  indiceCacBase  Decimal? @db.Decimal(16, 4) // índice CAC del mes base del contrato
+  indiceCacFecha Decimal? @db.Decimal(16, 4) // índice CAC del mes de la certificación
   contrato     ContratoCliente      @relation(fields: [contratoId], references: [id], onDelete: Cascade)
   lineas       CertificacionLinea[]
   createdAt    DateTime             @default(now())
@@ -332,8 +348,15 @@ model CertificacionLinea {
   pvTotalTarea     Decimal       @db.Decimal(18, 2)
   baseCertificada  Decimal       @db.Decimal(18, 2)
   presupuestoLabel String?
-  certificacion    Certificacion @relation(fields: [certificacionId], references: [id], onDelete: Cascade)
-  createdAt        DateTime      @default(now())
+  // Link robusto a la línea de presupuesto (certs de app). El import solo usa codTarea.
+  lineaId          String?
+  // Snapshot de la descripción de la tarea, para display estable.
+  descripcion      String?
+  certificacion    Certificacion     @relation(fields: [certificacionId], references: [id], onDelete: Cascade)
+  linea            LineaPresupuesto? @relation(fields: [lineaId], references: [id], onDelete: SetNull)
+  createdAt        DateTime          @default(now())
+
+  @@index([lineaId])
 }
 
 model SubcontratoObra {

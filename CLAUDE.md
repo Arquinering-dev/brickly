@@ -262,5 +262,20 @@ El frontend en dev hace proxy de `/api/*` → `http://localhost:3000` (configura
 - ✅ Pantalla de importación en la UI
 - ✅ Coeficiente de actualización ICC (Dashboard, presupuestos, obra)
 - ✅ Reporte de avance real de obra (mobile/web): `/avance`, modelo `AvanceReporte`, real vs previsto
+- ✅ Certificación de avance (web, pestaña "Certificaciones" en la obra): arma la certificación del
+  mes desde el avance reportado, a **precio de venta**, con desacopio → **subtotal a enviar al
+  cliente**. Reusa `Certificacion`/`CertificacionLinea`/`ContratoCliente` con `fuente='app'` (el
+  import solo borra `fuente='import'`). Ciclo de vida `estado`:
+  `borrador → enviada → conformada → valorizada → facturada → cobrada` (transiciones validadas en
+  `obras.routes.ts`). Endpoints: `GET/POST/DELETE` por cert, `GET …/preview?mes=&anio=`,
+  `PATCH …/:certId` (estado), `GET …/:certId/valorizacion` + `POST …/:certId/valorizar`.
+  - ✅ **Certificación formal (`valorizada`)**: sobre el subtotal conformado, redeterminación
+    **CAC** (ratio = índice fecha / índice base, desde `IndiceCAC`) → desdoblamiento
+    **facturable / no facturable** (% sobre el total, negociable, NO por tarea) → **IVA** solo sobre
+    el facturable. Los inputs (pctFacturable, pctIva, indiceCacBase, indiceCacFecha) se persisten en
+    `Certificacion`; el desglose se computa con ellos (`computarValorizacion`). Defaults sugeridos
+    del OC importado. Referencia: `ESPEC_Circuito_Certificacion_v8.md` del repo de migración.
+  - 🔄 Pendiente: factura del componente facturable y registro de cobranza (estados
+    `facturada`/`cobrada` ya existen en la máquina, falta UI/modelo de comprobantes).
 - ✅ Layout responsive (sidebar drawer en mobile, presupuesto legible en celular)
 - 🔄 Cronograma mensual desde `1_Presupuesto` (pendiente: faltan columnas de meses en el Excel) → habilita la Proyección de insumos

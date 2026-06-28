@@ -3,6 +3,12 @@ import prisma from "../prisma/client";
 import { precioVentaUnitario } from "../lib/pricing";
 import { calcCantInsumo } from "../lib/composicion";
 import { getLatestIccRaw, calcCoefICC } from "../lib/icc";
+import {
+  computarCertificacionMes,
+  ensureContratoApp,
+  computarValorizacion,
+  sugerirValorizacionInputs,
+} from "../services/certificacion-avance.service";
 
 const router = Router();
 
@@ -1146,6 +1152,344 @@ router.post("/:id/avance", async (req: Request, res: Response) => {
     });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : "Error al reportar avance" });
+  }
+});
+
+// ─── Certificaciones de avance (armadas desde la web) ───────────────────────────
+// Valorizadas a precio de venta. Reutilizan Certificacion/CertificacionLinea con fuente='app'
+// colgando de un ContratoCliente sintético (ocId='APP') que el import NO borra.
+
+const fmtCertId = (mes: number, anio: number) => `AV-${anio}-${String(mes).padStart(2, "0")}`;
+
+// Campos que se devuelven al frontend para una certificación (cabecera).
+const CERT_SELECT = {
+  id: true, certId: true, fecha: true, baseBruta: true, desacopio: true,
+  subtotalNeto: true, pctDesacopio: true, estado: true,
+  periodoMes: true, periodoAnio: true, nota: true,
+  pctFacturable: true, pctIva: true, indiceCacBase: true, indiceCacFecha: true,
+} as const;
+
+// Ciclo de vida de la certificación de avance:
+//   borrador → enviada (al cliente) → conformada (cliente valida) → valorizada (formal: CAC/IVA/desdoblamiento)
+//   → facturada → cobrada. Se permite revertir un paso.
+const CERT_ESTADOS = ["borrador", "enviada", "conformada", "valorizada", "facturada", "cobrada"];
+const CERT_TRANSICIONES: Record<string, string[]> = {
+  borrador: ["enviada"],
+  enviada: ["conformada", "borrador"],
+  conformada: ["valorizada", "enviada"],
+  valorizada: ["facturada", "conformada"],
+  facturada: ["cobrada", "valorizada"],
+  cobrada: ["facturada"],
+};
+
+function serializeCert(c: {
+  id: string; certId: string; fecha: Date; baseBruta: unknown; desacopio: unknown;
+  subtotalNeto: unknown; pctDesacopio: unknown; estado: string;
+  periodoMes: number | null; periodoAnio: number | null; nota: string | null;
+  pctFacturable: unknown; pctIva: unknown; indiceCacBase: unknown; indiceCacFecha: unknown;
+}) {
+  const subtotal = Number(c.subtotalNeto);
+  // Si la cert ya está valorizada (tiene inputs), incluir el desglose computado.
+  const valorizacion =
+    c.pctFacturable != null
+      ? computarValorizacion({
+          subtotal,
+          pctFacturable: Number(c.pctFacturable),
+          pctIva: Number(c.pctIva ?? 0),
+          indiceCacBase: Number(c.indiceCacBase ?? 0),
+          indiceCacFecha: Number(c.indiceCacFecha ?? 0),
+        })
+      : null;
+  return {
+    id: c.id,
+    certId: c.certId,
+    fecha: c.fecha.toISOString(),
+    mes: c.periodoMes,
+    anio: c.periodoAnio,
+    bruto: Number(c.baseBruta),          // base bruta = Σ avance × PV
+    pctDesacopio: Number(c.pctDesacopio), // fracción 0..1
+    desacopio: Number(c.desacopio),       // monto descontado
+    subtotal,                             // bruto − desacopio = lo que se envía al cliente
+    estado: c.estado,
+    nota: c.nota,
+    // Inputs persistidos de la valorización (null si aún no se valorizó)
+    pctFacturable: c.pctFacturable != null ? Number(c.pctFacturable) : null,
+    pctIva: c.pctIva != null ? Number(c.pctIva) : null,
+    indiceCacBase: c.indiceCacBase != null ? Number(c.indiceCacBase) : null,
+    indiceCacFecha: c.indiceCacFecha != null ? Number(c.indiceCacFecha) : null,
+    valorizacion,
+  };
+}
+
+// GET /api/obras/:id/certificaciones — lista de certificaciones de avance (fuente='app')
+router.get("/:id/certificaciones", async (req: Request, res: Response) => {
+  try {
+    const certs = await prisma.certificacion.findMany({
+      where: { fuente: "app", contrato: { obraId: req.params.id } },
+      orderBy: [{ periodoAnio: "desc" }, { periodoMes: "desc" }],
+      select: CERT_SELECT,
+    });
+    res.json({ certificaciones: certs.map(serializeCert) });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Error al listar certificaciones" });
+  }
+});
+
+// GET /api/obras/:id/certificaciones/preview?mes=&anio= — calcula (sin persistir) la cert del mes
+router.get("/:id/certificaciones/preview", async (req: Request, res: Response) => {
+  try {
+    const mes = Number(req.query.mes);
+    const anio = Number(req.query.anio);
+    if (!Number.isInteger(mes) || mes < 1 || mes > 12 || !Number.isInteger(anio)) {
+      return res.status(400).json({ error: "mes (1-12) y anio son requeridos" });
+    }
+    const data = await computarCertificacionMes(req.params.id, mes, anio);
+    if (!data) return res.status(404).json({ error: "Obra no encontrada" });
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Error al calcular certificación" });
+  }
+});
+
+// GET /api/obras/:id/certificaciones/:certId — detalle con líneas
+router.get("/:id/certificaciones/:certId", async (req: Request, res: Response) => {
+  try {
+    const cert = await prisma.certificacion.findFirst({
+      where: { id: req.params.certId, fuente: "app", contrato: { obraId: req.params.id } },
+      include: {
+        lineas: {
+          include: { linea: { select: { rubro: true, partida: { select: { unidad: true } } } } },
+          orderBy: { createdAt: "asc" },
+        },
+      },
+    });
+    if (!cert) return res.status(404).json({ error: "Certificación no encontrada" });
+    res.json({
+      ...serializeCert(cert),
+      lineas: cert.lineas.map((l) => ({
+        lineaId: l.lineaId,
+        codTarea: l.codTarea,
+        descripcion: l.descripcion ?? "—",
+        rubro: l.linea?.rubro ?? "GENERAL",
+        unidad: l.linea?.partida?.unidad ?? "u",
+        pctAnterior: Number(l.pctAnterior),
+        pctActual: Number(l.pctActual),
+        pctTotal: Number(l.pctTotal),
+        pvTotalTarea: Number(l.pvTotalTarea),
+        baseCertificada: Number(l.baseCertificada),
+      })),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Error al obtener certificación" });
+  }
+});
+
+// POST /api/obras/:id/certificaciones — emite (persiste) la certificación del mes.
+// Body: { mes, anio, nota?, lineas: [{ lineaId, pctActual (0..1) }] }
+// Los pctActual pueden venir editados por el usuario. Idempotente por (obra, mes/año): reemplaza.
+router.post("/:id/certificaciones", async (req: Request, res: Response) => {
+  try {
+    const obraId = req.params.id;
+    const { mes, anio, nota, pctDesacopio, lineas: lineasEdit } = req.body as {
+      mes?: number; anio?: number; nota?: string; pctDesacopio?: number;
+      lineas?: Array<{ lineaId: string; pctActual: number }>;
+    };
+    if (!Number.isInteger(mes) || (mes as number) < 1 || (mes as number) > 12 || !Number.isInteger(anio)) {
+      return res.status(400).json({ error: "mes (1-12) y anio son requeridos" });
+    }
+
+    // Base calculada desde el avance — fuente de pvTotalTarea, pctAnterior y descripción.
+    const calc = await computarCertificacionMes(obraId, mes as number, anio as number);
+    if (!calc) return res.status(404).json({ error: "Obra no encontrada" });
+
+    // Override de pctActual por línea (si el usuario los editó).
+    const overrides = new Map<string, number>();
+    for (const e of lineasEdit ?? []) {
+      if (e && e.lineaId && typeof e.pctActual === "number") {
+        overrides.set(e.lineaId, Math.min(1, Math.max(0, e.pctActual)));
+      }
+    }
+
+    const lineasData = calc.lineas
+      .map((l) => {
+        const pctActual = overrides.has(l.lineaId) ? overrides.get(l.lineaId)! : l.pctActual;
+        const pctTotal = Math.min(1, l.pctAnterior + pctActual);
+        const baseCertificada = l.pvTotalTarea * pctActual;
+        return {
+          codTarea: l.itemNumero ?? l.lineaId,
+          lineaId: l.lineaId,
+          descripcion: l.descripcion,
+          pctAnterior: l.pctAnterior.toFixed(6),
+          pctActual: pctActual.toFixed(6),
+          pctTotal: pctTotal.toFixed(6),
+          pvTotalTarea: l.pvTotalTarea.toFixed(2),
+          baseCertificada: baseCertificada.toFixed(2),
+        };
+      })
+      .filter((l) => Number(l.pctActual) > 0);
+
+    if (lineasData.length === 0) {
+      return res.status(400).json({ error: "No hay avance para certificar en este período" });
+    }
+
+    const baseBruta = lineasData.reduce((s, l) => s + Number(l.baseCertificada), 0);
+    // Desacopio de la preliminar (lo que se envía al cliente): bruto − desacopio = subtotal.
+    // Default al % sugerido del contrato; editable por quien arma la certificación.
+    const pctDesacFrac = Math.min(
+      1,
+      Math.max(0, typeof pctDesacopio === "number" ? pctDesacopio : calc.pctDesacopioSugerido),
+    );
+    const desacopio = baseBruta * pctDesacFrac;
+    const subtotalNeto = baseBruta - desacopio;
+    const contratoId = await ensureContratoApp(obraId);
+    const certId = fmtCertId(mes as number, anio as number);
+    const fecha = new Date(Date.UTC(anio as number, (mes as number), 0)); // último día del mes
+
+    const cert = await prisma.$transaction(async (tx) => {
+      // Idempotencia: si ya existe la cert de este mes, la reemplazamos (cascada borra líneas).
+      await tx.certificacion.deleteMany({ where: { contratoId, certId } });
+      return tx.certificacion.create({
+        data: {
+          contratoId,
+          certId,
+          fecha,
+          baseBruta: baseBruta.toFixed(2),
+          pctDesacopio: pctDesacFrac.toFixed(2),
+          desacopio: desacopio.toFixed(2),
+          subtotalNeto: subtotalNeto.toFixed(2),
+          estado: "borrador",
+          fuente: "app",
+          periodoMes: mes as number,
+          periodoAnio: anio as number,
+          nota: nota || null,
+          lineas: { create: lineasData },
+        },
+        select: CERT_SELECT,
+      });
+    });
+
+    res.status(201).json(serializeCert(cert));
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Error al emitir certificación" });
+  }
+});
+
+// PATCH /api/obras/:id/certificaciones/:certId — avanzar/retroceder el estado del ciclo de vida
+router.patch("/:id/certificaciones/:certId", async (req: Request, res: Response) => {
+  try {
+    const { estado } = req.body as { estado?: string };
+    if (!estado || !CERT_ESTADOS.includes(estado)) {
+      return res.status(400).json({ error: `estado inválido (válidos: ${CERT_ESTADOS.join(", ")})` });
+    }
+    const existing = await prisma.certificacion.findFirst({
+      where: { id: req.params.certId, fuente: "app", contrato: { obraId: req.params.id } },
+      select: { id: true, estado: true },
+    });
+    if (!existing) return res.status(404).json({ error: "Certificación no encontrada" });
+
+    const permitidas = CERT_TRANSICIONES[existing.estado] ?? [];
+    if (estado !== existing.estado && !permitidas.includes(estado)) {
+      return res.status(409).json({
+        error: `No se puede pasar de "${existing.estado}" a "${estado}". Transiciones válidas: ${permitidas.join(", ") || "ninguna"}`,
+      });
+    }
+
+    const cert = await prisma.certificacion.update({
+      where: { id: existing.id },
+      data: { estado },
+      select: CERT_SELECT,
+    });
+    res.json(serializeCert(cert));
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Error al actualizar certificación" });
+  }
+});
+
+// GET /api/obras/:id/certificaciones/:certId/valorizacion — inputs sugeridos/persistidos + desglose
+// Alimenta la pantalla de valorización. No persiste.
+router.get("/:id/certificaciones/:certId/valorizacion", async (req: Request, res: Response) => {
+  try {
+    const cert = await prisma.certificacion.findFirst({
+      where: { id: req.params.certId, fuente: "app", contrato: { obraId: req.params.id } },
+      select: {
+        subtotalNeto: true, periodoMes: true, periodoAnio: true, estado: true,
+        pctFacturable: true, pctIva: true, indiceCacBase: true, indiceCacFecha: true,
+      },
+    });
+    if (!cert) return res.status(404).json({ error: "Certificación no encontrada" });
+
+    // Si ya se valorizó, usar los inputs persistidos; sino, sugerir defaults.
+    const sugeridos = await sugerirValorizacionInputs(
+      req.params.id, cert.periodoMes ?? 0, cert.periodoAnio ?? 0,
+    );
+    const inputs = {
+      pctFacturable: cert.pctFacturable != null ? Number(cert.pctFacturable) : sugeridos.pctFacturable,
+      pctIva: cert.pctIva != null ? Number(cert.pctIva) : sugeridos.pctIva,
+      indiceCacBase: cert.indiceCacBase != null ? Number(cert.indiceCacBase) : (sugeridos.indiceCacBase ?? 0),
+      indiceCacFecha: cert.indiceCacFecha != null ? Number(cert.indiceCacFecha) : (sugeridos.indiceCacFecha ?? 0),
+    };
+    const subtotal = Number(cert.subtotalNeto);
+    res.json({
+      estado: cert.estado,
+      subtotal,
+      yaValorizada: cert.pctFacturable != null,
+      indiceCacFechaDisponible: sugeridos.indiceCacFecha != null,
+      inputs,
+      valorizacion: computarValorizacion({ subtotal, ...inputs }),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Error al calcular valorización" });
+  }
+});
+
+// POST /api/obras/:id/certificaciones/:certId/valorizar — persiste la valorización formal
+// Body: { pctFacturable, pctIva, indiceCacBase, indiceCacFecha } (fracciones 0..1 para los %).
+// Requiere estado 'conformada' (o 're-valorizar' una ya 'valorizada'). Pasa a estado 'valorizada'.
+router.post("/:id/certificaciones/:certId/valorizar", async (req: Request, res: Response) => {
+  try {
+    const { pctFacturable, pctIva, indiceCacBase, indiceCacFecha } = req.body as {
+      pctFacturable?: number; pctIva?: number; indiceCacBase?: number; indiceCacFecha?: number;
+    };
+    const existing = await prisma.certificacion.findFirst({
+      where: { id: req.params.certId, fuente: "app", contrato: { obraId: req.params.id } },
+      select: { id: true, estado: true },
+    });
+    if (!existing) return res.status(404).json({ error: "Certificación no encontrada" });
+    if (existing.estado !== "conformada" && existing.estado !== "valorizada") {
+      return res.status(409).json({
+        error: `La certificación debe estar conformada para valorizarla (estado actual: "${existing.estado}")`,
+      });
+    }
+    const clamp01 = (n: unknown) => Math.min(1, Math.max(0, Number(n) || 0));
+    const cert = await prisma.certificacion.update({
+      where: { id: existing.id },
+      data: {
+        estado: "valorizada",
+        pctFacturable: clamp01(pctFacturable).toFixed(4),
+        pctIva: clamp01(pctIva).toFixed(4),
+        indiceCacBase: (Number(indiceCacBase) || 0).toFixed(4),
+        indiceCacFecha: (Number(indiceCacFecha) || 0).toFixed(4),
+      },
+      select: CERT_SELECT,
+    });
+    res.json(serializeCert(cert));
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Error al valorizar certificación" });
+  }
+});
+
+// DELETE /api/obras/:id/certificaciones/:certId — borra una certificación (y sus líneas, por cascada)
+router.delete("/:id/certificaciones/:certId", async (req: Request, res: Response) => {
+  try {
+    const existing = await prisma.certificacion.findFirst({
+      where: { id: req.params.certId, fuente: "app", contrato: { obraId: req.params.id } },
+      select: { id: true },
+    });
+    if (!existing) return res.status(404).json({ error: "Certificación no encontrada" });
+    await prisma.certificacion.delete({ where: { id: existing.id } });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Error al borrar certificación" });
   }
 });
 

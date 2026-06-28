@@ -63,7 +63,9 @@ export async function persistControlObra(
   await prisma.subcontratoObra.deleteMany({ where: { obraId } });
   await prisma.quincena.deleteMany({ where: { obraId } });
   await prisma.gastoDirInd.deleteMany({ where: { obraId } });
-  await prisma.contratoCliente.deleteMany({ where: { obraId } });
+  // Solo borrar los contratos/certs importados — las certificaciones armadas desde la web
+  // (fuente='app') no se tocan en el import (ver certificacion-avance.service.ts).
+  await prisma.contratoCliente.deleteMany({ where: { obraId, fuente: "import" } });
 
   // ── 2. Catálogos GLOBALes (upsert por clave única) ─────────────────────────────
   for (const r of extra.rubros) {
@@ -198,6 +200,7 @@ export async function persistControlObra(
         pctDesacopio: clamp2(c.pctDesacopio),
         pctIVA: clamp2(c.pctIVA),
         presupuestoLabel: c.presupuestoLabel,
+        fuente: "import",
       },
       select: { id: true },
     });
@@ -213,6 +216,7 @@ export async function persistControlObra(
           pctDesacopio: clamp2(cert.pctDesacopio),
           desacopio: cert.desacopio,
           subtotalNeto: cert.subtotalNeto,
+          fuente: "import",
         },
         select: { id: true },
       });
