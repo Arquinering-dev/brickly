@@ -8,6 +8,7 @@ import {
   ensureContratoApp,
   computarValorizacion,
   sugerirValorizacionInputs,
+  computarCobranza,
 } from "../services/certificacion-avance.service";
 
 const router = Router();
@@ -1490,6 +1491,189 @@ router.delete("/:id/certificaciones/:certId", async (req: Request, res: Response
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : "Error al borrar certificación" });
+  }
+});
+
+// ─── Facturación y cobranza de una certificación ────────────────────────────────
+
+const COMP_TIPOS = ["factura", "recibo", "anticipo"];
+
+function valDeCert(c: {
+  subtotalNeto: unknown; pctFacturable: unknown; pctIva: unknown;
+  indiceCacBase: unknown; indiceCacFecha: unknown;
+}) {
+  if (c.pctFacturable == null) return null;
+  return computarValorizacion({
+    subtotal: Number(c.subtotalNeto),
+    pctFacturable: Number(c.pctFacturable),
+    pctIva: Number(c.pctIva ?? 0),
+    indiceCacBase: Number(c.indiceCacBase ?? 0),
+    indiceCacFecha: Number(c.indiceCacFecha ?? 0),
+  });
+}
+
+function serializeComp(c: {
+  id: string; tipo: string; numero: string | null; monto: unknown; fecha: Date;
+  fechaCobro: Date | null; retencion: unknown; nota: string | null;
+}) {
+  return {
+    id: c.id, tipo: c.tipo, numero: c.numero,
+    monto: Number(c.monto),
+    fecha: c.fecha.toISOString(),
+    fechaCobro: c.fechaCobro ? c.fechaCobro.toISOString() : null,
+    retencion: c.retencion != null ? Number(c.retencion) : null,
+    nota: c.nota,
+  };
+}
+
+// Recalcula el estado de la cert según sus comprobantes (no baja de 'valorizada').
+async function recomputeEstadoCobranza(certId: string): Promise<void> {
+  const cert = await prisma.certificacion.findUnique({
+    where: { id: certId },
+    select: {
+      estado: true, subtotalNeto: true, pctFacturable: true, pctIva: true,
+      indiceCacBase: true, indiceCacFecha: true,
+      comprobantes: { select: { tipo: true, monto: true, fechaCobro: true } },
+    },
+  });
+  if (!cert) return;
+  // Solo gestionamos automáticamente la cola del ciclo (valorizada→facturada→cobrada).
+  if (!["valorizada", "facturada", "cobrada"].includes(cert.estado)) return;
+  const cob = computarCobranza(
+    valDeCert(cert),
+    cert.comprobantes.map((c) => ({ tipo: c.tipo, monto: Number(c.monto), fechaCobro: c.fechaCobro })),
+  );
+  const nuevo = cob.estadoSugerido ?? "valorizada";
+  if (nuevo !== cert.estado) {
+    await prisma.certificacion.update({ where: { id: certId }, data: { estado: nuevo } });
+  }
+}
+
+async function findCertApp(obraId: string, certId: string) {
+  return prisma.certificacion.findFirst({
+    where: { id: certId, fuente: "app", contrato: { obraId } },
+    select: {
+      id: true, estado: true, subtotalNeto: true, pctFacturable: true, pctIva: true,
+      indiceCacBase: true, indiceCacFecha: true,
+      comprobantes: { orderBy: { fecha: "asc" }, select: {
+        id: true, tipo: true, numero: true, monto: true, fecha: true,
+        fechaCobro: true, retencion: true, nota: true,
+      } },
+    },
+  });
+}
+
+// GET .../comprobantes — lista de comprobantes + resumen de facturación/cobranza
+router.get("/:id/certificaciones/:certId/comprobantes", async (req: Request, res: Response) => {
+  try {
+    const cert = await findCertApp(req.params.id, req.params.certId);
+    if (!cert) return res.status(404).json({ error: "Certificación no encontrada" });
+    const resumen = computarCobranza(
+      valDeCert(cert),
+      cert.comprobantes.map((c) => ({ tipo: c.tipo, monto: Number(c.monto), fechaCobro: c.fechaCobro })),
+    );
+    res.json({ estado: cert.estado, resumen, comprobantes: cert.comprobantes.map(serializeComp) });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Error al listar comprobantes" });
+  }
+});
+
+// POST .../comprobantes — registra una factura/recibo/anticipo
+router.post("/:id/certificaciones/:certId/comprobantes", async (req: Request, res: Response) => {
+  try {
+    const { tipo, numero, monto, fecha, fechaCobro, retencion, nota } = req.body as {
+      tipo?: string; numero?: string; monto?: number; fecha?: string;
+      fechaCobro?: string | null; retencion?: number; nota?: string;
+    };
+    if (!tipo || !COMP_TIPOS.includes(tipo)) {
+      return res.status(400).json({ error: `tipo inválido (válidos: ${COMP_TIPOS.join(", ")})` });
+    }
+    if (monto == null || isNaN(Number(monto)) || Number(monto) <= 0) {
+      return res.status(400).json({ error: "monto debe ser mayor a 0" });
+    }
+    const cert = await prisma.certificacion.findFirst({
+      where: { id: req.params.certId, fuente: "app", contrato: { obraId: req.params.id } },
+      select: { id: true, estado: true },
+    });
+    if (!cert) return res.status(404).json({ error: "Certificación no encontrada" });
+    if (!["valorizada", "facturada", "cobrada"].includes(cert.estado)) {
+      return res.status(409).json({ error: `La certificación debe estar valorizada para facturar (estado: "${cert.estado}")` });
+    }
+    const comp = await prisma.comprobanteCert.create({
+      data: {
+        certificacionId: cert.id,
+        tipo,
+        numero: numero || null,
+        monto: Number(monto).toFixed(2),
+        fecha: fecha ? new Date(fecha) : new Date(),
+        fechaCobro: fechaCobro ? new Date(fechaCobro) : null,
+        retencion: retencion != null ? Number(retencion).toFixed(2) : null,
+        nota: nota || null,
+      },
+    });
+    await recomputeEstadoCobranza(cert.id);
+    res.status(201).json(serializeComp(comp));
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Error al registrar comprobante" });
+  }
+});
+
+// PATCH .../comprobantes/:compId — editar / registrar cobro (fechaCobro)
+router.patch("/:id/certificaciones/:certId/comprobantes/:compId", async (req: Request, res: Response) => {
+  try {
+    const cert = await prisma.certificacion.findFirst({
+      where: { id: req.params.certId, fuente: "app", contrato: { obraId: req.params.id } },
+      select: { id: true },
+    });
+    if (!cert) return res.status(404).json({ error: "Certificación no encontrada" });
+    const existing = await prisma.comprobanteCert.findFirst({
+      where: { id: req.params.compId, certificacionId: cert.id },
+      select: { id: true },
+    });
+    if (!existing) return res.status(404).json({ error: "Comprobante no encontrado" });
+
+    const b = req.body as {
+      tipo?: string; numero?: string | null; monto?: number; fecha?: string;
+      fechaCobro?: string | null; retencion?: number | null; nota?: string | null;
+    };
+    const data: Record<string, unknown> = {};
+    if (b.tipo !== undefined) {
+      if (!COMP_TIPOS.includes(b.tipo)) return res.status(400).json({ error: "tipo inválido" });
+      data.tipo = b.tipo;
+    }
+    if (b.numero !== undefined) data.numero = b.numero || null;
+    if (b.monto !== undefined) data.monto = Number(b.monto).toFixed(2);
+    if (b.fecha !== undefined) data.fecha = new Date(b.fecha);
+    if (b.fechaCobro !== undefined) data.fechaCobro = b.fechaCobro ? new Date(b.fechaCobro) : null;
+    if (b.retencion !== undefined) data.retencion = b.retencion != null ? Number(b.retencion).toFixed(2) : null;
+    if (b.nota !== undefined) data.nota = b.nota || null;
+
+    const comp = await prisma.comprobanteCert.update({ where: { id: existing.id }, data });
+    await recomputeEstadoCobranza(cert.id);
+    res.json(serializeComp(comp));
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Error al actualizar comprobante" });
+  }
+});
+
+// DELETE .../comprobantes/:compId
+router.delete("/:id/certificaciones/:certId/comprobantes/:compId", async (req: Request, res: Response) => {
+  try {
+    const cert = await prisma.certificacion.findFirst({
+      where: { id: req.params.certId, fuente: "app", contrato: { obraId: req.params.id } },
+      select: { id: true },
+    });
+    if (!cert) return res.status(404).json({ error: "Certificación no encontrada" });
+    const existing = await prisma.comprobanteCert.findFirst({
+      where: { id: req.params.compId, certificacionId: cert.id },
+      select: { id: true },
+    });
+    if (!existing) return res.status(404).json({ error: "Comprobante no encontrado" });
+    await prisma.comprobanteCert.delete({ where: { id: existing.id } });
+    await recomputeEstadoCobranza(cert.id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Error al borrar comprobante" });
   }
 });
 

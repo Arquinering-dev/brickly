@@ -333,9 +333,29 @@ model Certificacion {
   indiceCacFecha Decimal? @db.Decimal(16, 4) // índice CAC del mes de la certificación
   contrato     ContratoCliente      @relation(fields: [contratoId], references: [id], onDelete: Cascade)
   lineas       CertificacionLinea[]
+  comprobantes ComprobanteCert[]
   createdAt    DateTime             @default(now())
   updatedAt    DateTime             @updatedAt
   @@unique([contratoId, certId])
+}
+
+// Facturación y cobranza de una certificación valorizada (etapa final del circuito).
+// 1:N: una cert puede tener varias facturas/recibos (parciales). Un comprobante está
+// cobrado cuando tiene fechaCobro. Espeja la hoja Cert_Facturacion del Resumen.
+model ComprobanteCert {
+  id              String        @id @default(uuid())
+  certificacionId String
+  tipo            String        // 'factura' (facturable, c/IVA) | 'recibo' (no facturable) | 'anticipo'
+  numero          String?       // nro de comprobante (ej. "FA-B 0001")
+  monto           Decimal       @db.Decimal(18, 2)
+  fecha           DateTime      // fecha de emisión
+  fechaCobro      DateTime?     // null = pendiente de cobro
+  retencion       Decimal?      @db.Decimal(18, 2)
+  nota            String?
+  certificacion   Certificacion @relation(fields: [certificacionId], references: [id], onDelete: Cascade)
+  createdAt       DateTime      @default(now())
+
+  @@index([certificacionId])
 }
 
 model CertificacionLinea {

@@ -257,3 +257,54 @@ export async function sugerirValorizacionInputs(
     indiceCacFecha,
   };
 }
+
+// ─── Facturación y cobranza (etapa final) ───────────────────────────────────────
+export interface ComprobanteInput {
+  tipo: string;             // 'factura' | 'recibo' | 'anticipo'
+  monto: number;
+  fechaCobro: Date | null;
+}
+
+export interface Cobranza {
+  targetFacturable: number;     // total a facturar del componente facturable (c/IVA)
+  targetNoFacturable: number;   // total a documentar del componente no facturable
+  total: number;                // total certificación valorizada
+  facturado: number;            // Σ comprobantes 'factura'
+  documentadoNoFact: number;    // Σ comprobantes 'recibo'
+  anticipos: number;            // Σ comprobantes 'anticipo'
+  cobrado: number;              // Σ monto con fechaCobro
+  saldoFacturar: number;        // targetFacturable − facturado
+  saldoNoFacturable: number;    // targetNoFacturable − recibos
+  saldoCobrar: number;          // total − cobrado
+  estadoSugerido: "facturada" | "cobrada" | null; // según saldos (no baja de valorizada)
+}
+
+/** Agrega los comprobantes contra la valorización: facturado/cobrado/saldos + estado sugerido. */
+export function computarCobranza(val: Valorizacion | null, comprobantes: ComprobanteInput[]): Cobranza {
+  const targetFacturable = val ? val.facturable.total : 0;
+  const targetNoFacturable = val ? val.noFacturable.total : 0;
+  const total = val ? val.total : 0;
+  const sumBy = (pred: (c: ComprobanteInput) => boolean) =>
+    comprobantes.filter(pred).reduce((s, c) => s + (Number(c.monto) || 0), 0);
+
+  const facturado = sumBy((c) => c.tipo === "factura");
+  const documentadoNoFact = sumBy((c) => c.tipo === "recibo");
+  const anticipos = sumBy((c) => c.tipo === "anticipo");
+  const cobrado = sumBy((c) => c.fechaCobro != null);
+
+  const EPS = 0.5; // tolerancia de redondeo en pesos
+  let estadoSugerido: "facturada" | "cobrada" | null = null;
+  if (total > 0) {
+    if (cobrado >= total - EPS) estadoSugerido = "cobrada";
+    else if (facturado + documentadoNoFact >= total - EPS) estadoSugerido = "facturada";
+  }
+
+  return {
+    targetFacturable, targetNoFacturable, total,
+    facturado, documentadoNoFact, anticipos, cobrado,
+    saldoFacturar: Math.max(0, targetFacturable - facturado),
+    saldoNoFacturable: Math.max(0, targetNoFacturable - documentadoNoFact),
+    saldoCobrar: Math.max(0, total - cobrado),
+    estadoSugerido,
+  };
+}

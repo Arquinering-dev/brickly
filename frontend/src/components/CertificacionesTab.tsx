@@ -640,6 +640,14 @@ function DetalleCertificacion({
         />
       )}
 
+      {["valorizada", "facturada", "cobrada"].includes(cert.estado) && (
+        <FacturacionPanel
+          obraId={obraId}
+          certId={certId}
+          onEstado={(estado) => setCert((prev) => (prev ? { ...prev, estado } : prev))}
+        />
+      )}
+
       <Dialog open={confirmDelete} onOpenChange={(o) => !o && setConfirmDelete(false)}>
         <DialogContent>
           <DialogHeader>
@@ -802,6 +810,194 @@ function ValorizacionPanel({
             </Button>
           </div>
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Panel de facturación y cobranza ────────────────────────────────────────────
+interface Comprobante {
+  id: string; tipo: string; numero: string | null; monto: number;
+  fecha: string; fechaCobro: string | null; retencion: number | null; nota: string | null;
+}
+interface CobranzaResumen {
+  targetFacturable: number; targetNoFacturable: number; total: number;
+  facturado: number; documentadoNoFact: number; anticipos: number; cobrado: number;
+  saldoFacturar: number; saldoNoFacturable: number; saldoCobrar: number;
+  estadoSugerido: string | null;
+}
+const COMP_TIPO_LABEL: Record<string, string> = {
+  factura: "Factura (facturable)", recibo: "Recibo (no facturable)", anticipo: "Anticipo",
+};
+
+function FacturacionPanel({
+  obraId, certId, onEstado,
+}: { obraId: string; certId: string; onEstado: (estado: string) => void }) {
+  const [data, setData] = useState<{ estado: string; resumen: CobranzaResumen; comprobantes: Comprobante[] } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  // form
+  const [tipo, setTipo] = useState("factura");
+  const [numero, setNumero] = useState("");
+  const [monto, setMonto] = useState("");
+  const [fecha, setFecha] = useState("");
+
+  const load = useCallback(async () => {
+    try {
+      const r = await apiFetch(`/api/obras/${obraId}/certificaciones/${certId}/comprobantes`);
+      if (!r.ok) throw new Error((await r.json()).error ?? "Error");
+      const d = await r.json();
+      setData(d);
+      onEstado(d.estado);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error al cargar comprobantes");
+    }
+  }, [obraId, certId, onEstado]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const agregar = async () => {
+    if (!monto || Number(monto) <= 0) { setError("Ingresá un monto"); return; }
+    setBusy(true); setError(null);
+    try {
+      const r = await apiFetch(`/api/obras/${obraId}/certificaciones/${certId}/comprobantes`, {
+        method: "POST",
+        body: JSON.stringify({ tipo, numero: numero || undefined, monto: Number(monto), fecha: fecha || undefined }),
+      });
+      if (!r.ok) throw new Error((await r.json()).error ?? "Error");
+      setNumero(""); setMonto(""); setFecha("");
+      await load();
+    } catch (e) { setError(e instanceof Error ? e.message : "Error al registrar"); }
+    finally { setBusy(false); }
+  };
+
+  const patch = async (compId: string, body: Record<string, unknown>) => {
+    setBusy(true); setError(null);
+    try {
+      const r = await apiFetch(`/api/obras/${obraId}/certificaciones/${certId}/comprobantes/${compId}`, {
+        method: "PATCH", body: JSON.stringify(body),
+      });
+      if (!r.ok) throw new Error((await r.json()).error ?? "Error");
+      await load();
+    } catch (e) { setError(e instanceof Error ? e.message : "Error"); }
+    finally { setBusy(false); }
+  };
+
+  const borrar = async (compId: string) => {
+    setBusy(true); setError(null);
+    try {
+      const r = await apiFetch(`/api/obras/${obraId}/certificaciones/${certId}/comprobantes/${compId}`, { method: "DELETE" });
+      if (!r.ok) throw new Error((await r.json()).error ?? "Error");
+      await load();
+    } catch (e) { setError(e instanceof Error ? e.message : "Error"); }
+    finally { setBusy(false); }
+  };
+
+  if (error && !data) return <Card><CardContent className="py-4 text-sm text-red-600">{error}</CardContent></Card>;
+  if (!data) return <Skeleton className="h-56 w-full" />;
+  const r = data.resumen;
+
+  const hoy = () => new Date().toISOString().slice(0, 10);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <FileText className="h-4 w-4" /> Facturación y cobranza
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Resumen de saldos */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="rounded-lg border border-slate-200 p-3 text-sm">
+            <p className="text-xs uppercase tracking-wide text-slate-400 mb-1">Facturable</p>
+            <p>Objetivo: <span className="stat-number">{fmtMoney(r.targetFacturable)}</span></p>
+            <p>Facturado: <span className="stat-number">{fmtMoney(r.facturado)}</span></p>
+            <p className={r.saldoFacturar > 0.5 ? "text-amber-600" : "text-success-700"}>Saldo: <span className="stat-number">{fmtMoney(r.saldoFacturar)}</span></p>
+          </div>
+          <div className="rounded-lg border border-slate-200 p-3 text-sm">
+            <p className="text-xs uppercase tracking-wide text-slate-400 mb-1">No facturable</p>
+            <p>Objetivo: <span className="stat-number">{fmtMoney(r.targetNoFacturable)}</span></p>
+            <p>Documentado: <span className="stat-number">{fmtMoney(r.documentadoNoFact)}</span></p>
+            <p className={r.saldoNoFacturable > 0.5 ? "text-amber-600" : "text-success-700"}>Saldo: <span className="stat-number">{fmtMoney(r.saldoNoFacturable)}</span></p>
+          </div>
+          <div className="rounded-lg border border-slate-200 p-3 text-sm bg-slate-50/60">
+            <p className="text-xs uppercase tracking-wide text-slate-400 mb-1">Cobranza</p>
+            <p>Total: <span className="stat-number">{fmtMoney(r.total)}</span></p>
+            <p>Cobrado: <span className="stat-number text-success-700">{fmtMoney(r.cobrado)}</span></p>
+            <p className={r.saldoCobrar > 0.5 ? "text-amber-600" : "text-success-700"}>Saldo a cobrar: <span className="stat-number">{fmtMoney(r.saldoCobrar)}</span></p>
+          </div>
+        </div>
+
+        {error && <p className="text-sm text-red-600">{error}</p>}
+
+        {/* Tabla de comprobantes */}
+        {data.comprobantes.length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-100 text-left text-xs uppercase tracking-wider text-slate-400">
+                  <th className="px-3 py-2 font-medium">Tipo</th>
+                  <th className="px-3 py-2 font-medium">Comprobante</th>
+                  <th className="px-3 py-2 font-medium">Fecha</th>
+                  <th className="px-3 py-2 font-medium text-right">Monto</th>
+                  <th className="px-3 py-2 font-medium">Cobro</th>
+                  <th className="px-3 py-2"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.comprobantes.map((c) => (
+                  <tr key={c.id} className="border-b border-slate-50 last:border-0">
+                    <td className="px-3 py-2">{COMP_TIPO_LABEL[c.tipo] ?? c.tipo}</td>
+                    <td className="px-3 py-2 text-slate-500">{c.numero ?? "—"}</td>
+                    <td className="px-3 py-2 text-slate-500">{fmtDate(c.fecha)}</td>
+                    <td className="px-3 py-2 text-right font-semibold stat-number">{fmtMoney(c.monto)}</td>
+                    <td className="px-3 py-2">
+                      {c.fechaCobro ? (
+                        <span className="inline-flex items-center gap-1.5">
+                          <Badge variant="success">Cobrado {fmtDate(c.fechaCobro)}</Badge>
+                          <button className="text-2xs text-slate-400 hover:text-slate-700" disabled={busy} onClick={() => patch(c.id, { fechaCobro: null })}>deshacer</button>
+                        </span>
+                      ) : (
+                        <Button variant="outline" size="sm" disabled={busy} onClick={() => patch(c.id, { fechaCobro: hoy() })}>Registrar cobro</Button>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <Button variant="ghost" size="icon-sm" className="text-slate-400 hover:text-red-600" disabled={busy} title="Borrar" onClick={() => borrar(c.id)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Alta de comprobante */}
+        <div className="flex flex-wrap items-end gap-3 border-t border-slate-100 pt-4">
+          <div className="w-52">
+            <Label>Tipo</Label>
+            <select className="flex h-9 w-full rounded border border-slate-200 bg-white px-3 text-sm" value={tipo} onChange={(e) => setTipo(e.target.value)}>
+              <option value="factura">Factura (facturable)</option>
+              <option value="recibo">Recibo (no facturable)</option>
+              <option value="anticipo">Anticipo</option>
+            </select>
+          </div>
+          <div className="w-36">
+            <Label>Comprobante</Label>
+            <Input value={numero} onChange={(e) => setNumero(e.target.value)} placeholder="FA-B 0001" />
+          </div>
+          <div className="w-40">
+            <Label>Monto</Label>
+            <Input type="number" min={0} step="0.01" value={monto} onChange={(e) => setMonto(e.target.value)} placeholder="0" />
+          </div>
+          <div className="w-40">
+            <Label>Fecha</Label>
+            <Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
+          </div>
+          <Button disabled={busy} onClick={agregar}><Plus className="h-4 w-4 mr-1.5" /> Agregar</Button>
+        </div>
       </CardContent>
     </Card>
   );
