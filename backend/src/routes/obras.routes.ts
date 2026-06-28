@@ -1697,18 +1697,18 @@ router.get("/:id/control", async (req: Request, res: Response) => {
     let header = await prisma.presupuestoHeader.findFirst({
       where: { obraId, estado: "vigente", tipo: "APROBADO" },
       orderBy: { createdAt: "desc" },
-      select: { id: true, tipo: true, nombre: true },
+      select: { id: true, tipo: true, nombre: true, cacValor: true },
     });
     if (!header) {
       header = await prisma.presupuestoHeader.findFirst({
         where: { obraId, estado: "vigente" },
         orderBy: { createdAt: "desc" },
-        select: { id: true, tipo: true, nombre: true },
+        select: { id: true, tipo: true, nombre: true, cacValor: true },
       });
     }
 
     // Traer todo en paralelo
-    const [lineas, movimientos, contratos, gastos] = await Promise.all([
+    const [lineas, movimientos, contratos, gastos, indicesCac] = await Promise.all([
       header
         ? prisma.lineaPresupuesto.findMany({
             where: { obraId, presupuestoHeaderId: header.id },
@@ -1727,7 +1727,23 @@ router.get("/:id/control", async (req: Request, res: Response) => {
                   certificaciones: { select: { fecha: true, baseBruta: true, estado: true } } },
       }),
       prisma.gastoDirInd.findMany({ where: { obraId }, select: { fecha: true, tipo: true, monto: true } }),
+      prisma.indiceCAC.findMany({ where: { esPrevision: false }, select: { mes: true, valorIndec: true } }),
     ]);
+
+    // ── Deflación CAC ────────────────────────────────────────────────────────────
+    // El control compara presupuesto (a precios base) contra el gasto DESCONTADO:
+    //   descontado(mov) = real × ratio(mes),  ratio(mes) = CAC_base / CAC(mes).
+    // Neutraliza la inflación para comparar contra el presupuesto. (LOGICA_CALCULO §0-1.)
+    const cacBase = Number(header?.cacValor ?? 0);
+    const cacPorMes = new Map<string, number>(); // "yyyy-mm" → valor INDEC
+    for (const r of indicesCac) {
+      cacPorMes.set(r.mes.toISOString().slice(0, 7), Number(r.valorIndec));
+    }
+    const ratioMes = (yyyymm: string): number => {
+      const cac = cacPorMes.get(yyyymm);
+      return cacBase > 0 && cac && cac > 0 ? cacBase / cac : 1;
+    };
+    const deflacionAplicada = cacBase > 0 && cacPorMes.size > 0;
 
     // ── Rubros ──────────────────────────────────────────────────────────────────
     const pptoMap = new Map<string, number>();
@@ -1738,29 +1754,36 @@ router.get("/:id/control", async (req: Request, res: Response) => {
       if (l.rubroMoAlb) acum(pptoMap, l.rubroMoAlb, Number(l.costoMoAlbUd ?? 0) * c);
     }
     const realMap = new Map<string, number>();
+    const descontadoMap = new Map<string, number>();
     for (const m of movimientos) {
       const r = m.rubroContable?.nombre;
-      if (r) acum(realMap, r, Number(m.debe) - Number(m.haber));
+      if (!r) continue;
+      const real = Number(m.debe) - Number(m.haber);
+      acum(realMap, r, real);
+      acum(descontadoMap, r, real * ratioMes(m.fecha.toISOString().slice(0, 7)));
     }
     type Semaforo = "ok" | "alerta" | "critico" | "sin_dato";
     const rubros = Array.from(new Set([...pptoMap.keys(), ...realMap.keys()])).map((rubro) => {
       const presupuestado = pptoMap.get(rubro) ?? 0;
       const gastado = realMap.get(rubro) ?? 0;
-      const desvio = gastado - presupuestado;
+      const gastadoDescontado = descontadoMap.get(rubro) ?? 0;
+      // Desvío y semáforo sobre el gasto DESCONTADO (lógica validada por el cliente).
+      const desvio = gastadoDescontado - presupuestado;
       const pctDesvio = presupuestado !== 0 ? desvio / presupuestado : 0;
       let semaforo: Semaforo;
       if (!realMap.has(rubro)) semaforo = "sin_dato";
-      else if (pctDesvio < 0.05) semaforo = "ok";
-      else if (pctDesvio < 0.15) semaforo = "alerta";
+      else if (pctDesvio <= 0.05) semaforo = "ok";
+      else if (pctDesvio <= 0.10) semaforo = "alerta";
       else semaforo = "critico";
-      return { rubro, presupuestado, gastado, desvio, pctDesvio, semaforo };
+      return { rubro, presupuestado, gastado, gastadoDescontado, desvio, pctDesvio, semaforo };
     });
     rubros.sort((a, b) => b.presupuestado - a.presupuestado);
 
     const totPresupuestado = rubros.reduce((s, r) => s + r.presupuestado, 0);
     const totGastado = rubros.reduce((s, r) => s + r.gastado, 0);
-    const totDesvio = totGastado - totPresupuestado;
-    const pctConsumo = totPresupuestado > 0 ? totGastado / totPresupuestado : 0;
+    const totGastadoDescontado = rubros.reduce((s, r) => s + r.gastadoDescontado, 0);
+    const totDesvio = totGastadoDescontado - totPresupuestado;
+    const pctConsumo = totPresupuestado > 0 ? totGastadoDescontado / totPresupuestado : 0;
 
     // Avance físico ponderado
     let numAv = 0, denAv = 0;
@@ -1782,7 +1805,8 @@ router.get("/:id/control", async (req: Request, res: Response) => {
 
     const bloques = [
       { nombre: "Costo de Obra", presupuestado: totPresupuestado, gastado: totGastado,
-        pctConsumo: totPresupuestado > 0 ? totGastado / totPresupuestado : null },
+        gastadoDescontado: totGastadoDescontado,
+        pctConsumo: totPresupuestado > 0 ? totGastadoDescontado / totPresupuestado : null },
       ...Array.from(gastosPorTipo.entries()).map(([tipo, monto]) => ({
         nombre: `Gastos ${tipo}`, presupuestado: null as number | null,
         gastado: monto, pctConsumo: null as number | null,
@@ -1821,9 +1845,9 @@ router.get("/:id/control", async (req: Request, res: Response) => {
 
     // ── Alertas ──────────────────────────────────────────────────────────────────
     const alertas: Array<{ nivel: string; mensaje: string }> = [];
-    const rubrosDesvio = rubros.filter((r) => r.pctDesvio > 0.15 && r.desvio > 1_000_000);
+    const rubrosDesvio = rubros.filter((r) => r.pctDesvio > 0.10 && r.desvio > 1_000_000);
     if (rubrosDesvio.length > 0)
-      alertas.push({ nivel: "critico", mensaje: `${rubrosDesvio.length} rubro(s) con desvío >15% y >$1M` });
+      alertas.push({ nivel: "critico", mensaje: `${rubrosDesvio.length} rubro(s) con desvío (descontado) >10% y >$1M` });
     if (pctConsumo > 0.9)
       alertas.push({ nivel: "critico", mensaje: `Consumo del ${(pctConsumo * 100).toFixed(0)}% del presupuesto` });
     if (valleCaja < -5_000_000)
@@ -1834,8 +1858,11 @@ router.get("/:id/control", async (req: Request, res: Response) => {
     res.json({
       obra,
       presupuestoHeader: header ? { id: header.id, tipo: header.tipo, nombre: header.nombre ?? null } : null,
-      margen: { venta, costoReal: totGastado, margen: venta - totGastado, pctMargen, resultadoAcum },
-      totales: { presupuestado: totPresupuestado, gastado: totGastado, desvio: totDesvio,
+      margen: { venta, costoReal: totGastado, costoDescontado: totGastadoDescontado,
+                margen: venta - totGastado, pctMargen, resultadoAcum },
+      cac: { base: cacBase, deflacionAplicada },
+      totales: { presupuestado: totPresupuestado, gastado: totGastado,
+                 gastadoDescontado: totGastadoDescontado, desvio: totDesvio,
                  pctDesvio: totPresupuestado !== 0 ? totDesvio / totPresupuestado : 0,
                  pctConsumo, pctAvanceFisico },
       bloques, rubros, flujoCaja,

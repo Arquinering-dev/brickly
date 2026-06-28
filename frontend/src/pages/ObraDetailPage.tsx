@@ -698,14 +698,15 @@ const TIPO_COLOR: Record<string, string> = {
 interface ControlData {
   obra: { id: string; nombre: string; codigo: string }
   presupuestoHeader: { id: string; tipo: string; nombre: string | null } | null
-  margen: { venta: number; costoReal: number; margen: number; pctMargen: number; resultadoAcum: number }
+  margen: { venta: number; costoReal: number; costoDescontado?: number; margen: number; pctMargen: number; resultadoAcum: number }
+  cac?: { base: number; deflacionAplicada: boolean }
   totales: {
-    presupuestado: number; gastado: number; desvio: number; pctDesvio: number
+    presupuestado: number; gastado: number; gastadoDescontado?: number; desvio: number; pctDesvio: number
     pctConsumo: number; pctAvanceFisico: number
   }
-  bloques: Array<{ nombre: string; presupuestado: number | null; gastado: number; pctConsumo: number | null }>
+  bloques: Array<{ nombre: string; presupuestado: number | null; gastado: number; gastadoDescontado?: number; pctConsumo: number | null }>
   rubros: Array<{
-    rubro: string; presupuestado: number; gastado: number; desvio: number
+    rubro: string; presupuestado: number; gastado: number; gastadoDescontado?: number; desvio: number
     pctDesvio: number; semaforo: "ok" | "alerta" | "critico" | "sin_dato"
   }>
   flujoCaja: Array<{ mes: string; ingresos: number; egresos: number; neto: number; acumulado: number }>
@@ -972,7 +973,12 @@ function ControlTab({ obraId }: { obraId: string }) {
       <Card>
         <CardHeader>
           <CardTitle>Control por rubro</CardTitle>
-          <CardDescription>Presupuesto congelado vs gasto real por rubro contable</CardDescription>
+          <CardDescription>
+            Presupuesto congelado vs gasto por rubro contable.{" "}
+            {controlData.cac?.deflacionAplicada
+              ? "El desvío se calcula sobre el gasto descontado por CAC (deflactado a precios base)."
+              : "Desvío sobre gasto real (sin índice CAC base cargado)."}
+          </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
@@ -982,6 +988,7 @@ function ControlTab({ obraId }: { obraId: string }) {
                   <th className="text-left px-4 py-2.5 font-medium">Rubro</th>
                   <th className="text-right px-4 py-2.5 font-medium">Presupuestado</th>
                   <th className="text-right px-4 py-2.5 font-medium">Gastado</th>
+                  <th className="text-right px-4 py-2.5 font-medium" title="Gasto deflactado a precios base por índice CAC">Descontado</th>
                   <th className="text-right px-4 py-2.5 font-medium">Desvío</th>
                   <th className="text-right px-4 py-2.5 font-medium">% Desvío</th>
                   <th className="text-center px-4 py-2.5 font-medium">Estado</th>
@@ -995,7 +1002,8 @@ function ControlTab({ obraId }: { obraId: string }) {
                     <tr key={r.rubro} className="border-b border-stone-50 hover:bg-stone-50/50">
                       <td className="px-4 py-2.5 font-medium text-stone-800">{r.rubro}</td>
                       <td className="px-4 py-2.5 text-right tabular-nums">{fmtMoney(r.presupuestado)}</td>
-                      <td className="px-4 py-2.5 text-right tabular-nums">{fmtMoney(r.gastado)}</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums text-stone-500">{fmtMoney(r.gastado)}</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums">{fmtMoney(r.gastadoDescontado ?? r.gastado)}</td>
                       <td className={`px-4 py-2.5 text-right tabular-nums font-medium ${sobreRow ? "text-red-600" : r.desvio < 0 ? "text-green-600" : "text-stone-400"}`}>
                         {r.desvio !== 0 ? (sobreRow ? "+" : "−") : ""}
                         {fmtMoney(Math.abs(r.desvio))}
@@ -1016,7 +1024,8 @@ function ControlTab({ obraId }: { obraId: string }) {
                 <tr>
                   <td className="px-4 py-2.5 font-bold text-stone-900">TOTAL</td>
                   <td className="px-4 py-2.5 text-right font-bold tabular-nums">{fmtMoney(totales.presupuestado)}</td>
-                  <td className="px-4 py-2.5 text-right font-bold tabular-nums">{fmtMoney(totales.gastado)}</td>
+                  <td className="px-4 py-2.5 text-right font-bold tabular-nums text-stone-500">{fmtMoney(totales.gastado)}</td>
+                  <td className="px-4 py-2.5 text-right font-bold tabular-nums">{fmtMoney(totales.gastadoDescontado ?? totales.gastado)}</td>
                   <td className={`px-4 py-2.5 text-right font-bold tabular-nums ${sobregasto ? "text-red-600" : "text-green-600"}`}>
                     {totales.desvio !== 0 ? (sobregasto ? "+" : "−") : ""}
                     {fmtMoney(Math.abs(totales.desvio))}
