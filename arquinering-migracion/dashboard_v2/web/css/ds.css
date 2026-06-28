@@ -1,0 +1,401 @@
+/* ============================================================
+   Industrial Integrity — Design System (P0 Fundaciones)
+   Fuente de verdad: design/DESIGN_SYSTEM.md
+   Capa nueva y aislada: NO pisa styles.css (dashboard actual).
+   ============================================================ */
+
+:root{
+  /* --- paleta: colores principales --- */
+  --primary:#091426;            /* sidebar, nav, headers — ancla visual */
+  --primary-container:#1e293b;  /* estructura secundaria */
+  --secondary:#9d4300;          /* naranja construcción — CTA crítica */
+  --secondary-container:#fd761a;/* highlight crítico / alerta de obra */
+  --tertiary:#00a472;           /* verde sage — tendencias OK */
+  --error:#ba1a1a;              /* crimson — desvíos negativos */
+
+  /* --- superficies y fondos --- */
+  --background:#f8f9ff;
+  --surface:#ffffff;            /* cards nivel 1 */
+  --surface-low:#eff4ff;        /* contenedores 2 º / relleno alterno */
+  --surface-container:#e5eeff;  /* contenedores 3 º */
+  --on-surface:#0b1c30;         /* texto principal */
+  --on-surface-variant:#45474c; /* texto secundario */
+  --outline:#c5c6cd;            /* bordes y separadores */
+
+  /* --- semáforo (estados) --- */
+  --ok:#00a472; --warn:#fd761a; --crit:#ba1a1a;
+
+  /* --- elevación tonal (sin sombras pesadas) --- */
+  --shadow-modal:0 4px 12px rgba(30,41,59,.08);
+
+  /* --- espaciado (base 4px) --- */
+  --xs:4px; --sm:8px; --md:16px; --lg:24px; --xl:32px;
+
+  /* --- radios --- */
+  --r-sm:2px; --r:4px; --r-md:6px; --r-lg:8px; --r-xl:12px; --r-full:9999px;
+
+  /* --- tipografía --- */
+  --font-ui:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  --font-mono:'JetBrains Mono','SF Mono',Consolas,monospace;
+
+  --sidebar-w:236px;
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+/* default global de iconos: todo SVG es chico, stroke, hereda color */
+.ds svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.7;display:block;flex:none}
+body.ds{
+  font-family:var(--font-ui);
+  background:var(--background);
+  color:var(--on-surface);
+  font-size:14px;
+  line-height:1.45;
+  -webkit-font-smoothing:antialiased;
+}
+.ds *{box-sizing:border-box}
+
+/* números: SIEMPRE JetBrains Mono */
+.mono,.ds-kpi .v,.ds-table td.num,.ds-table th.num,.meta-id{
+  font-family:var(--font-mono);font-feature-settings:"tnum" 1;}
+/* margen ppto (coeficiente PV÷Costo) */
+.mgn{font-family:var(--font-mono);font-feature-settings:"tnum" 1;white-space:nowrap;font-size:.92em}
+.mgn .dot{margin-right:4px}
+/* filas de ajuste (CAC/IVA) en la matriz fiscal: itálica + atenuado, para distinguirlas de la base */
+.fiadj{font-style:italic;color:var(--on-surface-variant)}
+
+/* =================== SHELL: sidebar + main =================== */
+.ds-app{display:grid;grid-template-columns:var(--sidebar-w) 1fr;min-height:100vh}
+
+.ds-sidebar{
+  background:var(--primary);color:#cdd6e4;
+  display:flex;flex-direction:column;
+  position:sticky;top:0;height:100vh;padding:var(--lg) 0;
+}
+.ds-logo{display:flex;align-items:center;gap:var(--sm);padding:0 var(--lg) var(--lg);
+  color:#fff;font-weight:700;font-size:16px;letter-spacing:.2px}
+.ds-logo .mark{width:28px;height:28px;border-radius:var(--r-md);background:var(--secondary-container);
+  display:grid;place-items:center;color:var(--primary);font-weight:800;flex:none}
+.ds-navlabel{font-family:var(--font-mono);font-size:10px;font-weight:500;letter-spacing:.8px;
+  text-transform:uppercase;color:#5d6b82;padding:var(--md) var(--lg) var(--xs)}
+.ds-nav{display:flex;flex-direction:column;gap:2px;padding:0 var(--sm)}
+.ds-nav a{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:var(--r-md);
+  color:#aebac8;font-size:13.5px;text-decoration:none;cursor:pointer;
+  border-left:2px solid transparent;transition:background .12s,color .12s}
+.ds-nav a:hover{background:var(--primary-container);color:#fff}
+.ds-nav a.active{background:var(--primary-container);color:#fff;border-left:2px solid var(--secondary-container)}
+.ds-nav a svg{width:18px;height:18px;flex:none;stroke:currentColor;fill:none;stroke-width:1.7}
+.ds-nav .wip{margin-left:auto;font-family:var(--font-mono);font-size:9px;color:var(--secondary-container);
+  border:1px solid var(--secondary);border-radius:var(--r-xl);padding:0 5px;letter-spacing:.5px}
+.ds-side-foot{margin-top:auto;padding:var(--md) var(--lg) 0}
+.ds-user{display:flex;align-items:center;gap:10px;color:#aebac8;font-size:12.5px;
+  border-top:1px solid var(--primary-container);padding-top:var(--md)}
+.ds-user .av{width:30px;height:30px;border-radius:var(--r-full);background:var(--primary-container);
+  display:grid;place-items:center;color:#fff;font-weight:600;flex:none}
+
+.ds-main{display:flex;flex-direction:column;min-width:0}
+
+/* =================== TOPBAR =================== */
+.ds-topbar{display:flex;align-items:center;gap:var(--md);background:var(--surface);
+  border-bottom:1px solid var(--outline);padding:0 var(--lg);height:60px;position:sticky;top:0;z-index:20}
+.ds-crumb{display:flex;align-items:center;gap:8px;font-weight:600;color:var(--on-surface)}
+.ds-crumb .sep{color:var(--outline)}
+.ds-crumb .dim{color:var(--on-surface-variant);font-weight:400}
+.ds-search{margin-left:var(--md);flex:1;max-width:360px;position:relative}
+.ds-search input{width:100%;height:36px;border:1px solid var(--outline);border-radius:var(--r);
+  background:var(--background);padding:0 12px 0 32px;font-family:var(--font-ui);font-size:13px;color:var(--on-surface)}
+.ds-search input:focus{outline:none;border-color:var(--primary)}
+.ds-search>svg{position:absolute;left:10px;top:10px;width:16px;height:16px;stroke:var(--on-surface-variant);z-index:1}
+.ds-top-actions{margin-left:auto;display:flex;align-items:center;gap:10px}
+.ds-iconbtn{width:36px;height:36px;border:1px solid var(--outline);border-radius:var(--r);background:var(--surface);
+  display:grid;place-items:center;cursor:pointer;color:var(--on-surface-variant)}
+.ds-iconbtn:hover{border-color:var(--primary);color:var(--on-surface)}
+.ds-iconbtn svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:1.7}
+
+/* =================== BOTONES =================== */
+.btn{display:inline-flex;align-items:center;gap:7px;height:36px;padding:0 14px;border-radius:var(--r);
+  font-family:var(--font-ui);font-size:13px;font-weight:600;cursor:pointer;border:1px solid transparent;
+  transition:filter .12s,background .12s}
+.btn svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.8}
+.btn-primary{background:var(--primary);color:#fff}
+.btn-primary:hover{filter:brightness(1.25)}
+.btn-secondary{background:transparent;color:var(--on-surface);border-color:var(--outline)}
+.btn-secondary:hover{border-color:var(--primary)}
+.btn-warning{background:var(--secondary-container);color:var(--primary)}
+.btn-warning:hover{filter:brightness(1.05)}
+
+/* =================== CONTENIDO + GRILLA 8/4 =================== */
+.ds-content{padding:var(--lg);max-width:1440px;width:100%;margin:0 auto}
+.ds-pagehead{display:flex;align-items:flex-end;justify-content:space-between;gap:var(--md);margin-bottom:var(--lg)}
+.ds-pagehead h1{font-size:32px;font-weight:600;margin:0;letter-spacing:-.5px;line-height:1.1}
+.ds-pagehead .subtitle{color:var(--on-surface-variant);font-size:13px;margin-top:4px}
+.ds-pagehead .subtitle .meta-id{text-transform:uppercase;font-size:11px;color:var(--on-surface-variant)}
+
+.grid-8-4{display:grid;grid-template-columns:2fr 1fr;gap:var(--md);align-items:start}
+.kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:var(--md);margin-bottom:var(--md)}
+.stack-md{display:flex;flex-direction:column;gap:var(--md)}
+.ds-cols2{display:grid;grid-template-columns:1fr 1fr;gap:var(--md)}
+.ds-chart{height:300px;position:relative}
+.ds-chart-tall{height:420px;position:relative}
+@media(max-width:1100px){.ds-cols2{grid-template-columns:1fr}}
+
+/* management notes (reporte ejecutivo) */
+.mnote{border-left:3px solid var(--outline);background:var(--surface-low);border-radius:var(--r-md);padding:10px 12px;margin-bottom:9px}
+.mnote:last-child{margin-bottom:0}
+.mnote.crit{border-left-color:var(--crit);background:#fdeeee}
+.mnote.warn{border-left-color:var(--warn);background:#fff5ec}
+.mnote.ok{border-left-color:var(--ok);background:#f1faf6}
+.mnote.info{border-left-color:var(--primary)}
+.mnote .mhead{font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--on-surface-variant);margin-bottom:3px}
+.mnote .mtxt{font-size:13px;color:var(--on-surface);line-height:1.4}
+
+/* =================== CARD (elevación tonal) =================== */
+.ds-card{background:var(--surface);border:1px solid var(--outline);border-radius:var(--r-lg);overflow:hidden}
+.ds-card-head{display:flex;align-items:center;gap:8px;padding:13px var(--md);border-bottom:1px solid var(--outline)}
+.ds-card-head h3{font-size:14px;font-weight:600;margin:0;color:var(--on-surface)}
+.ds-card-head .sub{font-size:11px;color:var(--on-surface-variant)}
+.ds-card-head .actions{margin-left:auto;display:flex;align-items:center;gap:8px}
+.ds-card-body{padding:var(--md)}
+.ds-card-body.flush{padding:0}
+
+/* =================== KPI CARD =================== */
+.ds-kpi{background:var(--surface);border:1px solid var(--outline);border-radius:var(--r-lg);padding:var(--md);
+  display:flex;flex-direction:column;gap:6px}
+.ds-kpi.accent{border-left:3px solid var(--primary)}
+.ds-kpi.accent.warn{border-left-color:var(--warn)}
+.ds-kpi.accent.crit{border-left-color:var(--crit)}
+.ds-kpi.accent.ok{border-left-color:var(--ok)}
+.ds-kpi .k{display:flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:10px;font-weight:500;
+  letter-spacing:.6px;text-transform:uppercase;color:var(--on-surface-variant)}
+.ds-kpi .v{font-size:26px;font-weight:700;color:var(--on-surface);letter-spacing:-.5px;line-height:1.05}
+.ds-kpi .v.ok{color:var(--ok)} .ds-kpi .v.crit{color:var(--crit)} .ds-kpi .v.warn{color:var(--secondary)}
+.ds-kpi .sub{font-size:11.5px;color:var(--on-surface-variant)}
+.ds-kpi .delta{font-family:var(--font-mono);font-size:11px;font-weight:500;display:inline-flex;align-items:center;gap:3px}
+.ds-kpi .delta.up{color:var(--ok)} .ds-kpi .delta.down{color:var(--crit)}
+
+/* =================== TABLA DENSA =================== */
+.ds-table{width:100%;border-collapse:collapse;font-size:13px}
+.ds-table th{font-weight:600;text-align:left;color:var(--on-surface-variant);font-size:11px;
+  text-transform:uppercase;letter-spacing:.4px;padding:9px 14px;border-bottom:1px solid var(--outline);
+  background:var(--surface);white-space:nowrap}
+.ds-table th.num,.ds-table td.num{text-align:right}
+.ds-table td{padding:5px 14px;height:38px;border-bottom:1px solid var(--surface-low);color:var(--on-surface)}
+.ds-table td:first-child{white-space:nowrap}
+.ds-table td.num{font-size:12.5px}
+.ds-table tbody tr:nth-child(even) td{background:var(--surface-low)}
+.ds-table tbody tr:hover td{background:var(--surface-container)}
+.ds-table tr.total td{font-weight:700;border-top:1.5px solid var(--outline);background:var(--surface);height:40px}
+.ds-table .neg{color:var(--crit)} .ds-table .pos{color:var(--ok)}
+
+/* =================== STATUS DOT =================== */
+.dot{width:8px;height:8px;border-radius:var(--r-full);display:inline-block;flex:none;vertical-align:middle}
+.dot.verde,.dot.ok{background:var(--ok)} .dot.amarillo,.dot.warn{background:var(--warn)}
+.dot.rojo,.dot.crit{background:var(--crit)}
+.dot.sin_datos,.dot.neutro{background:var(--outline)}
+.dot-label{display:inline-flex;align-items:center;gap:7px}
+
+/* =================== BARRA DE PROGRESO DUAL-TONE =================== */
+.dbar{position:relative;height:8px;background:var(--outline);border-radius:var(--r-sm);overflow:hidden;min-width:90px}
+.dbar>i{position:absolute;left:0;top:0;height:100%;border-radius:var(--r-sm);background:var(--ok)}
+.dbar>i.warn{background:var(--warn)} .dbar>i.crit{background:var(--crit)}
+.dbar>i.nav{background:var(--primary)}
+.dbar>.plan{position:absolute;top:-2px;height:12px;width:2px;background:var(--primary);border-radius:1px}
+.bar-cell{display:flex;align-items:center;gap:8px}
+.bar-cell .pctv{font-family:var(--font-mono);font-size:12px;min-width:42px;text-align:right;color:var(--on-surface)}
+.bar-cell .pctv.muted{color:var(--on-surface-variant)}
+
+/* sparkline (cash flow resumen) — override del default global de svg */
+.spark{display:block;width:100%}
+.ds .spark svg{width:100%;height:36px;stroke:none}
+
+/* filas de resumen dentro de cards (cash / cert) */
+.sumrow{display:flex;align-items:center;gap:9px;padding:8px 0;border-bottom:1px solid var(--surface-low)}
+.sumrow:last-child{border-bottom:none}
+.sumrow .lab{font-size:12.5px;color:var(--on-surface-variant)}
+.sumrow .val{margin-left:auto;font-family:var(--font-mono);font-size:13px;font-weight:500;color:var(--on-surface)}
+.sumrow .val.crit{color:var(--crit)} .sumrow .val.ok{color:var(--ok)}
+.bignum{font-family:var(--font-mono);font-size:24px;font-weight:700;letter-spacing:-.5px;line-height:1.1}
+.bignum.crit{color:var(--crit)} .bignum.ok{color:var(--ok)}
+.card-link{display:inline-flex;align-items:center;gap:4px;margin-top:10px;font-size:12px;font-weight:600;
+  color:var(--primary);cursor:pointer;text-decoration:none}
+.card-link:hover{color:var(--secondary)}
+.muted-note{font-size:11.5px;color:var(--on-surface-variant)}
+
+/* header de sección dentro de un módulo (Compromisos y Recursos) */
+.ds-sech{display:flex;align-items:baseline;gap:10px;font-size:19px;font-weight:600;color:var(--on-surface);
+  margin:26px 0 13px;padding-bottom:9px;border-bottom:2px solid var(--primary)}
+.ds-sech:first-of-type{margin-top:6px}
+.ds-sech .cnt{font-family:var(--font-mono);font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.4px;color:var(--on-surface-variant)}
+
+/* =================== CHIP ⓘ (insight on-demand) =================== */
+.itip{position:relative;display:inline-flex;align-items:center;cursor:help;flex:none}
+.itip.l{}
+.itip-i{width:15px;height:15px;border-radius:var(--r-full);border:1px solid var(--outline);
+  color:var(--on-surface-variant);font-size:10px;font-weight:700;font-style:italic;display:grid;place-items:center;line-height:1}
+.itip:hover .itip-i,.itip:focus-within .itip-i{border-color:var(--primary);color:var(--primary)}
+.itip-pop{position:absolute;top:135%;right:0;z-index:60;width:max-content;max-width:240px;
+  background:var(--primary);color:#eef2f9;font-size:11.5px;font-weight:400;line-height:1.5;
+  padding:9px 11px;border-radius:var(--r-md);box-shadow:var(--shadow-modal);
+  opacity:0;visibility:hidden;transform:translateY(-3px);transition:opacity .13s,visibility .13s,transform .13s;pointer-events:none}
+.itip.l .itip-pop{right:auto;left:0}
+.itip:hover .itip-pop,.itip:focus-within .itip-pop{opacity:1;visibility:visible;transform:translateY(0)}
+
+/* =================== STATUS PILL =================== */
+.spill{display:inline-flex;align-items:center;gap:5px;font-family:var(--font-mono);font-size:10px;font-weight:500;
+  text-transform:uppercase;letter-spacing:.4px;padding:3px 8px;border-radius:var(--r-xl);border:1px solid transparent}
+.spill.ok{background:#e3f6ef;color:#066c4d;border-color:#bce7d8}
+.spill.warn{background:#fff1e3;color:#9d4300;border-color:#ffd9b8}
+.spill.crit{background:#fde7e7;color:#8f1414;border-color:#f6c4c4}
+.spill.info{background:var(--surface-container);color:var(--on-surface-variant);border-color:var(--outline)}
+
+/* pipeline cert → factura → cobro */
+.ds-pipeline{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--md);margin-bottom:var(--md)}
+.pstep{background:var(--surface);border:1px solid var(--outline);border-left:3px solid var(--outline);border-radius:var(--r-lg);padding:13px 16px}
+.pstep.ok{border-left-color:var(--ok)} .pstep.warn{border-left-color:var(--warn)} .pstep.info{border-left-color:var(--primary)}
+.pstep .pk{font-size:11px;color:var(--on-surface-variant);text-transform:uppercase;letter-spacing:.3px}
+.pstep .pv{font-family:var(--font-mono);font-size:20px;font-weight:700;margin-top:5px;letter-spacing:-.4px}
+
+/* certificaciones recientes */
+.certrow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;
+  border-bottom:1px solid var(--surface-low);cursor:pointer}
+.certrow:last-child{border-bottom:none} .certrow:hover{background:var(--surface-low)}
+.certrow .cid{font-weight:600;font-size:13px} .certrow .cdate{font-family:var(--font-mono);font-size:11px;color:var(--on-surface-variant)}
+.certrow .cright{text-align:right} .certrow .camt{font-family:var(--font-mono);font-size:13px;font-weight:600;margin-bottom:3px}
+
+/* flujo cert → factura → cobro (drawer) */
+.ds-flow{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px}
+.fstep{background:var(--surface-low);border:1px solid var(--outline);border-radius:var(--r-md);padding:11px 12px;opacity:.55}
+.fstep.done{opacity:1;border-color:var(--ok);background:#f1faf6}
+.fstep .fk{font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--on-surface-variant)}
+.fstep .fv{font-family:var(--font-mono);font-size:14px;font-weight:600;margin:3px 0}
+.fstep .fsub{font-family:var(--font-mono);font-size:10px;color:var(--on-surface-variant)}
+
+/* break table (composición / cobranza en drawer) */
+.ds-table.brk td{border-bottom:1px solid var(--surface-low);height:30px}
+.ds-table.brk tbody tr:nth-child(even) td{background:transparent}
+.ds-table.brk tr.total td{background:var(--surface-low)}
+.ds-kpi .k .wtag,th .wtag{font-family:var(--font-mono);font-size:9px;color:var(--secondary);border:1px solid var(--secondary);
+  border-radius:var(--r-xl);padding:0 5px;letter-spacing:.4px;text-transform:none}
+
+/* =================== ALERTAS (panel derecho) =================== */
+.alert-item{display:flex;gap:10px;padding:11px 0;border-bottom:1px solid var(--surface-low)}
+.alert-item:last-child{border-bottom:none}
+.alert-item .dot{margin-top:6px}
+.alert-item .txt{font-size:13px;color:var(--on-surface);line-height:1.4}
+.alert-item .sev{font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--on-surface-variant)}
+
+/* =================== PLACEHOLDER WIP =================== */
+.ds-wip{border:1.5px dashed var(--outline);border-radius:var(--r-lg);background:repeating-linear-gradient(
+    -45deg,transparent,transparent 9px,var(--surface-low) 9px,var(--surface-low) 10px);
+  padding:var(--md);min-height:120px;display:flex;flex-direction:column;justify-content:center;gap:6px}
+.ds-wip .tag{align-self:flex-start;font-family:var(--font-mono);font-size:10px;font-weight:500;text-transform:uppercase;
+  letter-spacing:.5px;color:var(--secondary);border:1px solid var(--secondary);border-radius:var(--r-xl);padding:2px 8px}
+.ds-wip .title{font-weight:600;color:var(--on-surface-variant)}
+.ds-wip .note{font-size:12px;color:var(--on-surface-variant);max-width:46ch}
+
+/* =================== KPI WIP =================== */
+.ds-kpi.wip{border-style:dashed;background:repeating-linear-gradient(-45deg,transparent,transparent 9px,var(--surface-low) 9px,var(--surface-low) 10px)}
+.ds-kpi.wip .v.muted{color:var(--outline)}
+.ds-kpi .k .wtag{font-family:var(--font-mono);font-size:9px;color:var(--secondary);border:1px solid var(--secondary);
+  border-radius:var(--r-xl);padding:0 5px;letter-spacing:.4px}
+
+/* =================== DRAWER (drill) =================== */
+.ds-dov{position:fixed;inset:0;background:rgba(9,20,38,.42);opacity:0;visibility:hidden;transition:opacity .18s,visibility .18s;z-index:80}
+.ds-dov.open{opacity:1;visibility:visible}
+.ds-drawer{position:absolute;top:0;right:0;height:100%;width:min(1100px,max(50vw,620px));max-width:96vw;
+  background:var(--surface);transform:translateX(100%);transition:transform .2s;overflow-x:hidden;overflow-y:auto}
+/* en el drawer (panel ancho ~½ pantalla) las descripciones cortan línea → sin scroll horizontal */
+.ds-drawer .ds-table td:first-child{white-space:normal}
+.ds-dov.open .ds-drawer{transform:translateX(0)}
+.ds-dhead{position:sticky;top:0;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:space-between;padding:15px 20px;z-index:2}
+.ds-dhead .rt{font-size:18px;font-weight:600}
+.ds-dhead .st{font-size:11px;color:#9fb0c6;font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
+.ds-dhead .dx{background:transparent;border:0;color:#fff;font-size:17px;cursor:pointer;line-height:1}
+.ds-dbody{padding:18px 20px 40px}
+.ds-banner{background:#fde7e7;color:#8f1414;border:1px solid #f6c4c4;border-radius:var(--r);padding:9px 12px;font-size:13px;font-weight:600;margin-bottom:16px}
+.ds-consumo .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:9px}
+.ds-consumo .lab{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--on-surface-variant);text-transform:uppercase;letter-spacing:.4px}
+.ds-consumo .big{font-family:var(--font-mono);font-size:30px;font-weight:700;letter-spacing:-1px;line-height:1}
+.ds-consumo .big.crit{color:var(--crit)} .ds-consumo .big.warn{color:var(--secondary)} .ds-consumo .big.ok{color:var(--ok)}
+.ds-consumo .dbar{height:10px}
+.ds-figs3,.ds-figs4{display:grid;gap:10px;margin-top:15px}
+.ds-figs3{grid-template-columns:repeat(3,1fr)}
+.ds-figs4{grid-template-columns:repeat(4,1fr)}
+.ds-figs3 .f .k,.ds-figs4 .f .k{font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--on-surface-variant)}
+.ds-figs3 .f .v,.ds-figs4 .f .v{font-family:var(--font-mono);font-size:15px;font-weight:600;margin-top:3px}
+.ds-figs3 .f .v.crit,.ds-figs4 .f .v.crit{color:var(--crit)}
+.ds-metrics{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:16px 0}
+.ds-metrics .m{background:var(--surface-low);border:1px solid var(--outline);border-radius:var(--r-md);padding:10px 12px}
+.ds-metrics .m .k{font-size:11px;color:var(--on-surface-variant)}
+.ds-metrics .m .v{font-family:var(--font-mono);font-size:16px;font-weight:600;display:block;margin-top:3px}
+.ds-metrics .m .v small{font-family:var(--font-ui);font-size:11px;color:var(--on-surface-variant);font-weight:400}
+.ds-recon{display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin-bottom:6px}
+.rchip{display:inline-flex;align-items:center;gap:5px;font-family:var(--font-mono);font-size:11px;font-weight:500;padding:3px 9px;border-radius:var(--r-xl)}
+.rchip.ok{background:#e3f6ef;color:#066c4d} .rchip.warn{background:#fff1e3;color:#9d4300}
+.ds-sectitle{font-weight:600;font-size:13px;margin:20px 0 9px;padding-bottom:7px;border-bottom:1px solid var(--outline)}
+.itp{display:inline-block;min-width:46px;color:var(--primary);font-size:10px;font-weight:700;font-family:var(--font-mono)}
+.compd{margin-left:7px;padding:1px 7px;border-radius:var(--r-xl);background:#fff1e3;color:#9d4300;font-size:11px;font-weight:600;white-space:nowrap}
+.compn{margin-left:7px;color:var(--on-surface-variant);font-size:11px;font-style:italic}
+.ds-table tr.child td{background:var(--surface-low);color:var(--on-surface-variant);height:30px;font-size:12.5px}
+.ds-table tr.grp{cursor:pointer}
+.ds-table tr.grp .tg{display:inline-block;width:13px;color:var(--primary);font-size:9px}
+.ds-table tr.rowlink{cursor:pointer}
+.ds-table tr.rowlink:hover td{background:var(--surface-container)}
+
+/* =================== PORTFOLIO =================== */
+.pf-agg{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:var(--md);margin-bottom:var(--lg)}
+.pf-stat{background:var(--surface);border:1px solid var(--outline);border-radius:var(--r-lg);padding:14px 16px}
+.pf-stat .k{font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--on-surface-variant)}
+.pf-stat .v{font-family:var(--font-mono);font-size:22px;font-weight:700;letter-spacing:-.5px;margin-top:4px;color:var(--on-surface)}
+.pf-stat .v.crit{color:var(--crit)} .pf-stat .v.ok{color:var(--ok)}
+.pf-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(372px,1fr));gap:var(--md)}
+.pf-obra{cursor:pointer;transition:border-color .12s,box-shadow .12s}
+.pf-obra:hover{border-color:var(--primary);box-shadow:var(--shadow-modal)}
+.pf-obra-head{display:flex;align-items:flex-start;gap:8px}
+.pf-obra-head .nom{font-weight:600;font-size:15px;color:var(--on-surface)}
+.pf-obra-head .meta-id{display:block;margin-top:3px;font-size:10px;text-transform:uppercase;letter-spacing:.3px;color:var(--on-surface-variant)}
+.pf-bar{margin:11px 0 0}
+.pf-bar .lbl{display:flex;justify-content:space-between;align-items:baseline;font-size:11px;color:var(--on-surface-variant);margin-bottom:5px}
+.pf-bar .lbl .mono{font-size:12px;color:var(--on-surface)}
+.pf-figs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:13px;padding-top:12px;border-top:1px solid var(--surface-low)}
+.pf-figs .k{font-size:9.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--on-surface-variant)}
+.pf-figs .v{font-family:var(--font-mono);font-size:14px;font-weight:600;margin-top:3px;color:var(--on-surface)}
+.pf-figs .v.crit{color:var(--crit)} .pf-figs .v.ok{color:var(--ok)}
+
+/* =================== RESPONSIVE =================== */
+@media(max-width:1100px){ .grid-8-4{grid-template-columns:1fr} }
+@media(max-width:860px){
+  .ds-app{grid-template-columns:1fr}
+  .ds-sidebar{position:fixed;left:-100%;transition:left .2s;z-index:50}
+  .ds-sidebar.open{left:0}
+}
+
+/* --- Dashboard: card KPI dual (avance + consumo) y secciones full-width --- */
+.ds-kpi.dual{justify-content:flex-start;gap:6px}
+.ds-kpi.dual .pf-bar{margin:6px 0 0;width:100%}
+.dash-split{display:flex;gap:var(--lg,24px);align-items:flex-start;flex-wrap:wrap}
+.dash-split-main{flex:1 1 320px;min-width:280px}
+.dash-split-main .spark{display:block;width:100%}
+.dash-split-side{flex:1 1 300px;min-width:260px}
+@media(max-width:760px){ .dash-split{gap:12px} }
+
+/* --- Drill de rubro: código de tarea + insumos agrupados por tipo --- */
+.tcode{font-family:var(--font-mono);font-size:11px;font-weight:600;color:var(--primary);margin-right:1px}
+.ds-table tr.child.grp-head td{
+  background:var(--surface-low);font-family:var(--font-mono);font-size:9.5px;font-weight:600;
+  text-transform:uppercase;letter-spacing:.5px;color:var(--on-surface-variant);
+  padding:5px 10px 4px;border-top:1px solid var(--outline)}
+.ds-table tr.child.grp-head:first-child td{border-top:none}
+.insumo-desc{font-size:12px}
+
+/* --- Banner de gaps de datos (huecos que deben verse) --- */
+.ds-gaps{border-radius:var(--r-lg);padding:11px 14px;margin-bottom:var(--md);
+  border:1px solid var(--outline);background:var(--surface)}
+.ds-gaps.crit{border-left:3px solid var(--crit);background:rgba(186,26,26,.04)}
+.ds-gaps.warn{border-left:3px solid var(--warn);background:rgba(214,154,0,.05)}
+.ds-gaps-h{display:flex;align-items:center;gap:7px;font-family:var(--font-mono);font-size:11px;
+  font-weight:600;text-transform:uppercase;letter-spacing:.4px;color:var(--on-surface);margin-bottom:7px}
+.ds-gaps-i{font-size:11px}
+.ds-gap{display:flex;align-items:flex-start;gap:8px;font-size:12.5px;color:var(--on-surface-variant);
+  padding:3px 0;line-height:1.45}
+.ds-gap .dot{margin-top:4px;flex:none}

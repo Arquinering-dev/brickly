@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Avance de Obra y Certificaciones - Construx Pro</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "tertiary-fixed": "#6ffbbe",
+                        "error": "#ba1a1a",
+                        "on-error-container": "#93000a",
+                        "on-surface": "#0b1c30",
+                        "secondary-container": "#fd761a",
+                        "inverse-surface": "#213145",
+                        "surface-container-low": "#eff4ff",
+                        "on-primary-fixed": "#111c2d",
+                        "primary-fixed": "#d8e3fb",
+                        "on-primary": "#ffffff",
+                        "outline-variant": "#c5c6cd",
+                        "on-tertiary-container": "#00a472",
+                        "tertiary-container": "#00301e",
+                        "secondary-fixed": "#ffdbca",
+                        "surface-container-lowest": "#ffffff",
+                        "surface-container-high": "#dce9ff",
+                        "on-secondary-fixed-variant": "#783200",
+                        "on-background": "#0b1c30",
+                        "surface-variant": "#d3e4fe",
+                        "on-error": "#ffffff",
+                        "background": "#f8f9ff",
+                        "error-container": "#ffdad6",
+                        "on-tertiary-fixed-variant": "#005236",
+                        "on-tertiary": "#ffffff",
+                        "secondary": "#9d4300",
+                        "primary-container": "#1e293b",
+                        "surface-container": "#e5eeff",
+                        "on-primary-fixed-variant": "#3c475a",
+                        "surface-container-highest": "#d3e4fe",
+                        "primary-fixed-dim": "#bcc7de",
+                        "on-tertiary-fixed": "#002113",
+                        "secondary-fixed-dim": "#ffb690",
+                        "on-primary-container": "#8590a6",
+                        "on-secondary-fixed": "#341100",
+                        "inverse-primary": "#bcc7de",
+                        "primary": "#091426",
+                        "inverse-on-surface": "#eaf1ff",
+                        "tertiary": "#00190e",
+                        "surface-dim": "#cbdbf5",
+                        "on-surface-variant": "#45474c",
+                        "surface-tint": "#545f73",
+                        "outline": "#75777d",
+                        "on-secondary-container": "#5c2400",
+                        "on-secondary": "#ffffff",
+                        "tertiary-fixed-dim": "#4edea3",
+                        "surface-bright": "#f8f9ff",
+                        "surface": "#f8f9ff"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "max_width": "1440px",
+                        "xl": "32px",
+                        "sm": "8px",
+                        "unit": "4px",
+                        "md": "16px",
+                        "gutter": "16px",
+                        "xs": "4px",
+                        "lg": "24px",
+                        "margin": "24px"
+                    },
+                    "fontFamily": {
+                        "label-sm": ["JetBrains Mono"],
+                        "label-md": ["JetBrains Mono"],
+                        "body-sm": ["Inter"],
+                        "headline-lg": ["Inter"],
+                        "display-lg": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "headline-md": ["Inter"],
+                        "headline-sm": ["Inter"],
+                        "body-md": ["Inter"],
+                        "headline-lg-mobile": ["Inter"]
+                    },
+                    "fontSize": {
+                        "label-sm": ["10px", { "lineHeight": "14px", "fontWeight": "500" }],
+                        "label-md": ["12px", { "lineHeight": "16px", "fontWeight": "500" }],
+                        "body-sm": ["12px", { "lineHeight": "16px", "fontWeight": "400" }],
+                        "headline-lg": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+                        "display-lg": ["48px", { "lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "headline-md": ["24px", { "lineHeight": "32px", "fontWeight": "600" }],
+                        "headline-sm": ["18px", { "lineHeight": "24px", "fontWeight": "600" }],
+                        "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "headline-lg-mobile": ["24px", { "lineHeight": "32px", "fontWeight": "600" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body { background-color: #F8FAFC; }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border: 1px solid theme('colors.outline-variant');
+        }
+    </style>
+</head>
+<body class="font-body-md text-on-surface antialiased bg-slate-50 overflow-x-hidden">
+<div class="flex min-h-screen">
+<!-- SideNavBar (from JSON) -->
+<aside class="bg-surface-container-low dark:bg-primary-container text-primary dark:text-primary-fixed-dim font-label-md text-label-md h-screen w-64 flex-shrink-0 border-r border-outline-variant dark:border-outline flat no shadows flex flex-col h-full sticky left-0 top-0 py-md hidden md:flex z-30">
+<div class="px-md mb-xl flex items-center space-x-sm">
+<div class="w-8 h-8 rounded bg-primary text-on-primary flex items-center justify-center font-bold">C</div>
+<div>
+<div class="font-headline-sm text-headline-sm font-bold text-primary dark:text-primary-fixed-dim">Construx Pro</div>
+<div class="text-on-surface-variant font-label-sm text-label-sm">Enterprise Tier</div>
+</div>
+</div>
+<nav class="flex-1 overflow-y-auto px-sm space-y-unit">
+<a class="flex items-center px-sm py-sm rounded text-on-surface-variant dark:text-on-primary-container hover:bg-surface-container dark:hover:bg-surface-variant transition-all active:scale-95 duration-150 group" href="#">
+<span class="material-symbols-outlined mr-sm text-on-surface-variant group-hover:text-primary transition-colors">folder_open</span>
+<span class="group-hover:text-primary transition-colors">Project Selector</span>
+</a>
+<a class="flex items-center px-sm py-sm rounded text-on-surface-variant dark:text-on-primary-container hover:bg-surface-container dark:hover:bg-surface-variant transition-all active:scale-95 duration-150 group" href="#">
+<span class="material-symbols-outlined mr-sm text-on-surface-variant group-hover:text-primary transition-colors">dashboard</span>
+<span class="group-hover:text-primary transition-colors">Dashboard</span>
+</a>
+<a class="flex items-center px-sm py-sm rounded text-on-surface-variant dark:text-on-primary-container hover:bg-surface-container dark:hover:bg-surface-variant transition-all active:scale-95 duration-150 group" href="#">
+<span class="material-symbols-outlined mr-sm text-on-surface-variant group-hover:text-primary transition-colors">payments</span>
+<span class="group-hover:text-primary transition-colors">Budget Control</span>
+</a>
+<a class="flex items-center px-sm py-sm rounded text-on-surface-variant dark:text-on-primary-container hover:bg-surface-container dark:hover:bg-surface-variant transition-all active:scale-95 duration-150 group" href="#">
+<span class="material-symbols-outlined mr-sm text-on-surface-variant group-hover:text-primary transition-colors">trending_up</span>
+<span class="group-hover:text-primary transition-colors">Cash Flow</span>
+</a>
+<a class="flex items-center px-sm py-sm rounded text-primary dark:text-tertiary-fixed border-r-2 border-primary dark:border-tertiary-fixed font-bold bg-surface-container-highest dark:bg-surface-variant hover:bg-surface-container dark:hover:bg-surface-variant transition-all active:scale-95 duration-150" href="#">
+<span class="material-symbols-outlined mr-sm text-primary">leaderboard</span>
+<span>Progress</span>
+</a>
+<a class="flex items-center px-sm py-sm rounded text-on-surface-variant dark:text-on-primary-container hover:bg-surface-container dark:hover:bg-surface-variant transition-all active:scale-95 duration-150 group" href="#">
+<span class="material-symbols-outlined mr-sm text-on-surface-variant group-hover:text-primary transition-colors">receipt_long</span>
+<span class="group-hover:text-primary transition-colors">Invoicing</span>
+</a>
+<a class="flex items-center px-sm py-sm rounded text-on-surface-variant dark:text-on-primary-container hover:bg-surface-container dark:hover:bg-surface-variant transition-all active:scale-95 duration-150 group" href="#">
+<span class="material-symbols-outlined mr-sm text-on-surface-variant group-hover:text-primary transition-colors">assessment</span>
+<span class="group-hover:text-primary transition-colors">Reports</span>
+</a>
+</nav>
+<div class="px-sm mt-auto border-t border-outline-variant pt-sm">
+<a class="flex items-center px-sm py-sm rounded text-on-surface-variant dark:text-on-primary-container hover:bg-surface-container dark:hover:bg-surface-variant transition-all active:scale-95 duration-150 group" href="#">
+<span class="material-symbols-outlined mr-sm text-on-surface-variant group-hover:text-primary transition-colors">settings</span>
+<span class="group-hover:text-primary transition-colors">Settings</span>
+</a>
+<a class="flex items-center px-sm py-sm rounded text-on-surface-variant dark:text-on-primary-container hover:bg-surface-container dark:hover:bg-surface-variant transition-all active:scale-95 duration-150 group" href="#">
+<span class="material-symbols-outlined mr-sm text-on-surface-variant group-hover:text-primary transition-colors">help_outline</span>
+<span class="group-hover:text-primary transition-colors">Support</span>
+</a>
+</div>
+</aside>
+<div class="flex-1 flex flex-col min-w-0">
+<!-- TopNavBar (from JSON) -->
+<header class="bg-surface dark:bg-on-background text-primary dark:text-primary-fixed-dim font-body-md text-body-md w-full h-16 border-b border-outline-variant dark:border-outline flat no shadows flex justify-between items-center px-lg w-full sticky top-0 z-40 bg-surface dark:bg-on-background">
+<div class="flex items-center space-x-md">
+<button class="md:hidden text-on-surface hover:bg-surface-container-low dark:hover:bg-surface-container-highest transition-colors cursor-pointer active:opacity-80 p-sm rounded">
+<span class="material-symbols-outlined">menu</span>
+</button>
+<div class="font-headline-sm text-headline-sm font-bold text-primary dark:text-primary-fixed-dim md:hidden">Construx Pro</div>
+<div class="hidden md:flex relative text-on-surface-variant focus-within:text-primary transition-colors">
+<span class="material-symbols-outlined absolute left-sm top-1/2 -translate-y-1/2">search</span>
+<input class="pl-xl pr-sm py-sm border border-outline-variant rounded focus:border-primary focus:ring-0 bg-transparent text-body-sm w-64 transition-colors" placeholder="Search..." type="text"/>
+</div>
+</div>
+<div class="flex items-center space-x-sm">
+<button class="p-sm text-on-surface-variant dark:text-on-surface-variant hover:bg-surface-container-low dark:hover:bg-surface-container-highest transition-colors cursor-pointer active:opacity-80 rounded-full" title="notifications">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="p-sm text-on-surface-variant dark:text-on-surface-variant hover:bg-surface-container-low dark:hover:bg-surface-container-highest transition-colors cursor-pointer active:opacity-80 rounded-full" title="download">
+<span class="material-symbols-outlined">download</span>
+</button>
+<button class="ml-sm px-md py-sm bg-primary text-on-primary rounded font-label-md hover:opacity-90 transition-opacity active:scale-95 flex items-center">
+<span>Export</span>
+</button>
+<div class="ml-md w-8 h-8 rounded-full bg-surface-variant overflow-hidden border border-outline-variant cursor-pointer hover:opacity-80 transition-opacity">
+<img alt="User profile" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuADsRuxnzIUZSPU-O5vfPsndJeM95Y9eVrfXl6WkcIky5IdLod5yQcpWlpGudoX2EsKFHfpqjSkvUQiHuAHr8pZllDswEg3A6fwONPDXjJHLCIw_WJ9uiCaDrMNiMpfRgsILXNzjnBuSVkM_HAI-wwgstpOPXJ8DtwFQ_mhPIBBc1bzhYHmHu4ttUNxpN5A9KAWMsXhxOaCwRgFO1bzZuItUVGqRhyYYPEEvSUmceLrptVOXimIWrN5Nftawgf-5pZ6UlfiyBFYbsk"/>
+</div>
+</div>
+</header>
+<main class="flex-1 p-md md:p-xl overflow-y-auto w-full max-w-[1440px] mx-auto">
+<!-- Header Section -->
+<div class="flex flex-col md:flex-row justify-between items-start md:items-end mb-xl gap-md">
+<div>
+<nav aria-label="Breadcrumb" class="flex text-on-surface-variant font-label-md mb-xs">
+<ol class="inline-flex items-center space-x-1 md:space-x-2">
+<li class="inline-flex items-center">
+<a class="hover:text-primary transition-colors" href="#">Proyectos</a>
+</li>
+<li>
+<div class="flex items-center">
+<span class="material-symbols-outlined text-[16px] mx-1">chevron_right</span>
+<span class="text-primary font-bold">Torre Alvear</span>
+</div>
+</li>
+</ol>
+</nav>
+<h1 class="font-headline-lg md:font-display-lg text-primary">Avance de Obra y Certificaciones</h1>
+</div>
+<div class="flex space-x-sm">
+<button class="px-md py-sm border border-outline text-primary rounded font-label-md hover:bg-surface-container transition-colors active:scale-95 flex items-center space-x-unit">
+<span class="material-symbols-outlined text-[18px]">download</span>
+<span>Export Progress Report</span>
+</button>
+<button class="px-md py-sm bg-primary text-on-primary rounded font-label-md hover:opacity-90 transition-opacity active:scale-95 flex items-center space-x-unit">
+<span class="material-symbols-outlined text-[18px]">add</span>
+<span>New Certification</span>
+</button>
+</div>
+</div>
+<!-- Summary Stats -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-md mb-xl">
+<!-- Stat 1 -->
+<div class="bg-surface border border-outline-variant rounded p-md flex flex-col justify-between">
+<div class="flex justify-between items-start mb-sm">
+<span class="font-label-md text-on-surface-variant uppercase tracking-wider">Total Physical Progress</span>
+<span class="material-symbols-outlined text-outline">analytics</span>
+</div>
+<div class="flex items-baseline space-x-sm mb-xs">
+<span class="font-headline-lg text-primary font-label-md">65.2%</span>
+</div>
+<div class="flex items-center text-error font-label-sm space-x-unit mt-auto">
+<span class="material-symbols-outlined text-[14px]">arrow_downward</span>
+<span>vs 68.0% planned</span>
+</div>
+<div class="w-full bg-slate-200 h-1 mt-sm rounded overflow-hidden">
+<div class="bg-error h-full" style="width: 65.2%"></div>
+</div>
+</div>
+<!-- Stat 2 -->
+<div class="bg-surface border border-outline-variant rounded p-md flex flex-col justify-between">
+<div class="flex justify-between items-start mb-sm">
+<span class="font-label-md text-on-surface-variant uppercase tracking-wider">Certified Amount</span>
+<span class="material-symbols-outlined text-outline">account_balance_wallet</span>
+</div>
+<div class="flex items-baseline space-x-sm mb-xs">
+<span class="font-headline-lg text-primary font-label-md">$1,245,000</span>
+</div>
+<div class="flex items-center text-on-surface-variant font-label-sm mt-auto">
+<span>48% of total budget</span>
+</div>
+<div class="w-full bg-slate-200 h-1 mt-sm rounded overflow-hidden">
+<div class="bg-tertiary-fixed-dim h-full" style="width: 48%"></div>
+</div>
+</div>
+<!-- Stat 3 -->
+<div class="bg-surface border border-outline-variant rounded p-md flex flex-col justify-between">
+<div class="flex justify-between items-start mb-sm">
+<span class="font-label-md text-on-surface-variant uppercase tracking-wider">Pending Certification</span>
+<span class="material-symbols-outlined text-secondary-container">pending_actions</span>
+</div>
+<div class="flex items-baseline space-x-sm mb-xs">
+<span class="font-headline-lg text-primary font-label-md">$450,000</span>
+</div>
+<div class="flex items-center text-on-surface-variant font-label-sm mt-auto">
+<span>Ready for Period #12</span>
+</div>
+<div class="w-full bg-slate-200 h-1 mt-sm rounded overflow-hidden">
+<div class="bg-secondary-container h-full" style="width: 18%"></div>
+</div>
+</div>
+<!-- Stat 4 -->
+<div class="bg-surface border border-outline-variant rounded p-md flex flex-col justify-between">
+<div class="flex justify-between items-start mb-sm">
+<span class="font-label-md text-on-surface-variant uppercase tracking-wider">Last Certification</span>
+<span class="material-symbols-outlined text-outline">event_available</span>
+</div>
+<div class="flex items-baseline space-x-sm mb-xs">
+<span class="font-headline-lg text-primary font-label-md">Oct 15, 2023</span>
+</div>
+<div class="flex items-center text-on-tertiary-container font-label-sm mt-auto space-x-unit">
+<div class="w-2 h-2 rounded-full bg-tertiary-fixed-dim"></div>
+<span>Approved &amp; Paid</span>
+</div>
+<div class="text-on-surface-variant font-label-sm mt-sm text-right">
+                        Cert #11 - $115,000
+                    </div>
+</div>
+</div>
+<!-- Bento Grid Layout -->
+<div class="grid grid-cols-1 xl:grid-cols-3 gap-md">
+<!-- Main Section: Progress Tracking Table (Spans 2 columns on XL) -->
+<div class="xl:col-span-2 bg-surface border border-outline-variant rounded flex flex-col">
+<div class="p-md border-b border-outline-variant flex justify-between items-center">
+<h2 class="font-headline-sm text-primary">Detalle de Rubros (Construction Items)</h2>
+<div class="flex space-x-sm">
+<button class="p-unit hover:bg-surface-container rounded text-on-surface-variant transition-colors"><span class="material-symbols-outlined text-[20px]">filter_list</span></button>
+<button class="p-unit hover:bg-surface-container rounded text-on-surface-variant transition-colors"><span class="material-symbols-outlined text-[20px]">more_vert</span></button>
+</div>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-low border-b border-outline-variant font-label-sm text-on-surface-variant uppercase tracking-wider">
+<th class="p-sm font-medium">Item</th>
+<th class="p-sm font-medium text-right w-32">Physical %</th>
+<th class="p-sm font-medium text-right w-32">Certified %</th>
+<th class="p-sm font-medium text-right">Amt to Certify</th>
+<th class="p-sm font-medium">Status</th>
+</tr>
+</thead>
+<tbody class="font-body-sm">
+<!-- Row 1 -->
+<tr class="border-b border-slate-100 hover:bg-slate-50 transition-colors h-[32px]">
+<td class="p-sm font-medium text-primary">01. Excavation</td>
+<td class="p-sm text-right font-label-md">
+<div class="flex items-center justify-end space-x-sm">
+<span>100%</span>
+<div class="w-12 h-1 bg-slate-200 rounded overflow-hidden"><div class="bg-tertiary-fixed-dim h-full w-full"></div></div>
+</div>
+</td>
+<td class="p-sm text-right font-label-md">
+<div class="flex items-center justify-end space-x-sm">
+<span>100%</span>
+<div class="w-12 h-1 bg-slate-200 rounded overflow-hidden"><div class="bg-tertiary-fixed-dim h-full w-full"></div></div>
+</div>
+</td>
+<td class="p-sm text-right font-label-md text-on-surface-variant">$0</td>
+<td class="p-sm">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-tertiary-fixed/20 text-on-tertiary-container">Completed</span>
+</td>
+</tr>
+<!-- Row 2 -->
+<tr class="border-b border-slate-100 hover:bg-slate-50 transition-colors h-[32px] bg-slate-50/50">
+<td class="p-sm font-medium text-primary">02. Foundation</td>
+<td class="p-sm text-right font-label-md">
+<div class="flex items-center justify-end space-x-sm">
+<span>100%</span>
+<div class="w-12 h-1 bg-slate-200 rounded overflow-hidden"><div class="bg-tertiary-fixed-dim h-full w-full"></div></div>
+</div>
+</td>
+<td class="p-sm text-right font-label-md">
+<div class="flex items-center justify-end space-x-sm">
+<span>85%</span>
+<div class="w-12 h-1 bg-slate-200 rounded overflow-hidden"><div class="bg-secondary-container h-full w-[85%]"></div></div>
+</div>
+</td>
+<td class="p-sm text-right font-label-md text-primary">$45,000</td>
+<td class="p-sm">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-secondary-fixed text-on-secondary-container">Ready to Certify</span>
+</td>
+</tr>
+<!-- Row 3 -->
+<tr class="border-b border-slate-100 hover:bg-slate-50 transition-colors h-[32px]">
+<td class="p-sm font-medium text-primary">03. Structure L1-L5</td>
+<td class="p-sm text-right font-label-md">
+<div class="flex items-center justify-end space-x-sm">
+<span>75%</span>
+<div class="w-12 h-1 bg-slate-200 rounded overflow-hidden"><div class="bg-primary h-full w-[75%]"></div></div>
+</div>
+</td>
+<td class="p-sm text-right font-label-md">
+<div class="flex items-center justify-end space-x-sm">
+<span>50%</span>
+<div class="w-12 h-1 bg-slate-200 rounded overflow-hidden"><div class="bg-secondary-container h-full w-[50%]"></div></div>
+</div>
+</td>
+<td class="p-sm text-right font-label-md text-primary">$210,000</td>
+<td class="p-sm">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-secondary-fixed text-on-secondary-container">Ready to Certify</span>
+</td>
+</tr>
+<!-- Row 4 -->
+<tr class="border-b border-slate-100 hover:bg-slate-50 transition-colors h-[32px] bg-slate-50/50">
+<td class="p-sm font-medium text-primary">04. Masonry L1-L3</td>
+<td class="p-sm text-right font-label-md">
+<div class="flex items-center justify-end space-x-sm">
+<span>30%</span>
+<div class="w-12 h-1 bg-slate-200 rounded overflow-hidden"><div class="bg-primary h-full w-[30%]"></div></div>
+</div>
+</td>
+<td class="p-sm text-right font-label-md">
+<div class="flex items-center justify-end space-x-sm">
+<span>10%</span>
+<div class="w-12 h-1 bg-slate-200 rounded overflow-hidden"><div class="bg-primary-fixed-dim h-full w-[10%]"></div></div>
+</div>
+</td>
+<td class="p-sm text-right font-label-md text-primary">$85,000</td>
+<td class="p-sm">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium border border-outline-variant text-on-surface-variant">In Progress</span>
+</td>
+</tr>
+<!-- Row 5 -->
+<tr class="border-b border-slate-100 hover:bg-slate-50 transition-colors h-[32px]">
+<td class="p-sm font-medium text-primary">05. MEP Rough-in</td>
+<td class="p-sm text-right font-label-md">
+<div class="flex items-center justify-end space-x-sm">
+<span>15%</span>
+<div class="w-12 h-1 bg-slate-200 rounded overflow-hidden"><div class="bg-primary h-full w-[15%]"></div></div>
+</div>
+</td>
+<td class="p-sm text-right font-label-md">
+<div class="flex items-center justify-end space-x-sm">
+<span>0%</span>
+<div class="w-12 h-1 bg-slate-200 rounded overflow-hidden"><div class="bg-transparent h-full w-[0%]"></div></div>
+</div>
+</td>
+<td class="p-sm text-right font-label-md text-primary">$110,000</td>
+<td class="p-sm">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium border border-outline-variant text-on-surface-variant">In Progress</span>
+</td>
+</tr>
+<!-- Row 6 -->
+<tr class="hover:bg-slate-50 transition-colors h-[32px] bg-slate-50/50">
+<td class="p-sm font-medium text-on-surface-variant">06. Finishes</td>
+<td class="p-sm text-right font-label-md">
+<div class="flex items-center justify-end space-x-sm">
+<span class="text-on-surface-variant">0%</span>
+<div class="w-12 h-1 bg-slate-200 rounded overflow-hidden"></div>
+</div>
+</td>
+<td class="p-sm text-right font-label-md">
+<div class="flex items-center justify-end space-x-sm">
+<span class="text-on-surface-variant">0%</span>
+<div class="w-12 h-1 bg-slate-200 rounded overflow-hidden"></div>
+</div>
+</td>
+<td class="p-sm text-right font-label-md text-on-surface-variant">-</td>
+<td class="p-sm">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium border border-outline-variant/50 text-outline">Not Started</span>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<!-- Side Panel: Recent Certifications -->
+<div class="bg-surface border border-outline-variant rounded flex flex-col h-full">
+<div class="p-md border-b border-outline-variant flex justify-between items-center">
+<h2 class="font-headline-sm text-primary">Recent Certifications</h2>
+<a class="text-primary text-body-sm font-medium hover:underline" href="#">View All</a>
+</div>
+<div class="flex-1 overflow-y-auto">
+<ul class="divide-y divide-outline-variant/50">
+<li class="p-md hover:bg-slate-50 transition-colors cursor-pointer group">
+<div class="flex justify-between items-start mb-unit">
+<div class="font-label-md font-bold text-primary group-hover:text-secondary transition-colors">Cert #12</div>
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-secondary-fixed text-on-secondary-container border border-secondary/20">Draft</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="font-body-sm text-on-surface-variant">Pending Approval</span>
+<span class="font-label-md text-primary font-bold">$450,000</span>
+</div>
+</li>
+<li class="p-md hover:bg-slate-50 transition-colors cursor-pointer group">
+<div class="flex justify-between items-start mb-unit">
+<div class="font-label-md font-bold text-primary">Cert #11</div>
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-tertiary-fixed/20 text-on-tertiary-container">Paid</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="font-body-sm text-on-surface-variant">Oct 15, 2023</span>
+<span class="font-label-md text-on-surface-variant">$115,000</span>
+</div>
+</li>
+<li class="p-md hover:bg-slate-50 transition-colors cursor-pointer group">
+<div class="flex justify-between items-start mb-unit">
+<div class="font-label-md font-bold text-primary">Cert #10</div>
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-tertiary-fixed/20 text-on-tertiary-container">Paid</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="font-body-sm text-on-surface-variant">Sep 15, 2023</span>
+<span class="font-label-md text-on-surface-variant">$280,000</span>
+</div>
+</li>
+<li class="p-md hover:bg-slate-50 transition-colors cursor-pointer group">
+<div class="flex justify-between items-start mb-unit">
+<div class="font-label-md font-bold text-primary">Cert #09</div>
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-tertiary-fixed/20 text-on-tertiary-container">Paid</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="font-body-sm text-on-surface-variant">Aug 15, 2023</span>
+<span class="font-label-md text-on-surface-variant">$190,000</span>
+</div>
+</li>
+<li class="p-md hover:bg-slate-50 transition-colors cursor-pointer group">
+<div class="flex justify-between items-start mb-unit">
+<div class="font-label-md font-bold text-primary">Cert #08</div>
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-tertiary-fixed/20 text-on-tertiary-container">Paid</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="font-body-sm text-on-surface-variant">Jul 15, 2023</span>
+<span class="font-label-md text-on-surface-variant">$210,000</span>
+</div>
+</li>
+</ul>
+</div>
+</div>
+</div>
+</main>
+</div>
+</div>
+</body></html>

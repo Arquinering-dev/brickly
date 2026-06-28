@@ -1,0 +1,18 @@
+# Registro de obras del dashboard v2 (estructura v8 — fuente cruda Tezamat).
+# `archivo`: nombre simple → se busca en data/ ; ruta con / o \ → relativa a dashboard_v2/
+#   (ej. "../archivos/output/X.xlsx" lee DIRECTO el archivo de trabajo, sin copiar a data/).
+# Criterio unificado (2026-06-22): ambas obras leen DIRECTO de archivos/output/ (el archivo de
+#   trabajo vigente). Editás ahí, guardás desde Excel, y el dashboard refresca solo (cache por mtime).
+obras:
+  - code: CH
+    nombre: "Chivilcoy 2171"
+    seccion: "Edificio"
+    archivo: "../archivos/output/CH_2171_Resumen_de_Obra_v8_12.xlsx"
+  - code: GDR
+    nombre: "García del Río 3760"
+    seccion: "Edificio"
+    archivo: "../archivos/output/GDR_3760_Resumen_de_Obra_v8_13.xlsx"
+  - code: SVD
+    nombre: "El Salvador 4140"
+    seccion: "Edificio"
+    archivo: "../archivos/output/SVD_4140_Resumen_de_Obra_v8_2.xlsx"

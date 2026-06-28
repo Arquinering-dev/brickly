@@ -199,14 +199,6 @@ function getSheetRows(
   return XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: null });
 }
 
-function isSection(row: unknown[]): boolean {
-  const f = row[5];
-  if (f === null || f === undefined || f === "") return false;
-  const n = Number(f);
-  if (isNaN(n)) return false;
-  return Number.isInteger(n) && !String(f).includes(".");
-}
-
 // ---------------------------------------------------------------------------
 // Parsers por hoja
 // ---------------------------------------------------------------------------
@@ -250,7 +242,9 @@ function parseConfig(wb: XLSX.WorkBook, warnings: string[]): ParsedResumen["conf
       const nextVal = row[i + 1];
       const nextVal2 = i + 2 < row.length ? row[i + 2] : null;
 
-      if (cell === "k" || (cell.includes("coef") && cell.includes("k"))) {
+      // K (coeficiente GGBB). v8 viejo: label "K". v8_12+: "K (Gastos Generales y Beneficio)".
+      if (cell === "k" || cell.startsWith("k ") || cell.startsWith("k(") ||
+          (cell.includes("coef") && cell.includes("k")) || cell.includes("gastos generales")) {
         const v = safeNum(nextVal, 0) || safeNum(nextVal2, 0);
         if (v !== 0) config.coefGGBB = v;
       } else if (cell === "cac base" || cell === "cac_base" || cell.includes("cac base") || cell.includes("cac_base")) {
@@ -271,6 +265,13 @@ function parseConfig(wb: XLSX.WorkBook, warnings: string[]): ParsedResumen["conf
       } else if (cell.includes("% negro") || cell === "negro") {
         const v = safeNum(nextVal, 0) || safeNum(nextVal2, 0);
         if (v !== 0) config.aperturaNegrop = v;
+      } else if (cell.includes("apertura fiscal")) {
+        // v8_12+: "Apertura fiscal" = "B65 / N35 / GDN" → blanco 0.65, negro 0.35.
+        const s = (safeStr(nextVal) || safeStr(nextVal2)).toUpperCase();
+        const mb = s.match(/B\s*(\d+(?:[.,]\d+)?)/);
+        const mn = s.match(/N\s*(\d+(?:[.,]\d+)?)/);
+        if (mb) config.aperturaBlancoP = parseFloat(mb[1].replace(",", ".")) / 100;
+        if (mn) config.aperturaNegrop = parseFloat(mn[1].replace(",", ".")) / 100;
       } else if (cell.includes("centro de costo") || cell.includes("código") || cell === "codigo") {
         const s = safeStr(nextVal) || safeStr(nextVal2);
         if (s) config.centroCosto = s;
@@ -331,12 +332,66 @@ function parseTarifasUOCRA(wb: XLSX.WorkBook, warnings: string[]): ParsedResumen
   return result;
 }
 
+// Normaliza un header: minúsculas, sin tildes, espacios colapsados.
+function normHeader(v: unknown): string {
+  return String(v ?? "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+// Mapa de columnas de 1_Presupuesto (índices 0-based). avance/presupuesto = -1 si no existe.
+interface PresCols {
+  cod: number; estado: number; desc: number; unidad: number; cant: number;
+  cmt: number; cotr: number; calb: number; ceq: number; costoUnit: number;
+  pvUd: number; pvMt: number; pvMoOtr: number; pvMoAlb: number; pvEq: number;
+  etapa: number; presupuesto: number; pctCert: number;
+  rubroMt: number; rubroMoOtr: number; rubroMoAlb: number;
+}
+
+// Layout VIEJO (pre-estandarización v8): cod=F, desc=H, pv=P, venta=R-U, etapa=AB, avance=AC-AE.
+const COLS_OLD: PresCols = {
+  cod: 5, estado: 6, desc: 7, unidad: 8, cant: 9, cmt: 10, cotr: 11, calb: 12, ceq: 13,
+  costoUnit: 14, pvUd: 15, pvMt: 17, pvMoOtr: 18, pvMoAlb: 19, pvEq: 20,
+  etapa: 27, presupuesto: -1, pctCert: 30, rubroMt: 0, rubroMoOtr: 2, rubroMoAlb: 3,
+};
+// Layout NUEVO estandarizado (v8_12+): cod=E, desc=G, venta=O-R, P.Unit=S, PV subtotal=V,
+// Etapa=W, Presupuesto=X, % Acum Tot=Y. El bloque de avance AA-AM se eliminó.
+const COLS_NEW: PresCols = {
+  cod: 4, estado: 5, desc: 6, unidad: 7, cant: 8, cmt: 9, cotr: 10, calb: 11, ceq: 12,
+  costoUnit: 13, pvUd: 18, pvMt: 14, pvMoOtr: 15, pvMoAlb: 16, pvEq: 17,
+  etapa: 22, presupuesto: 23, pctCert: 24, rubroMt: 0, rubroMoOtr: 2, rubroMoAlb: 3,
+};
+
+// Detecta el layout por la fila de headers (índice 2). Ancla en la columna "Cod. Ítem".
+function detectPresupuestoCols(headerRow: unknown[] | undefined, warnings: string[]): PresCols {
+  if (!headerRow) return COLS_OLD;
+  const codIdx = headerRow.findIndex((h) => {
+    const n = normHeader(h);
+    return n.includes("cod") && n.includes("item");
+  });
+  if (codIdx === COLS_NEW.cod) return COLS_NEW;
+  if (codIdx === COLS_OLD.cod) return COLS_OLD;
+  // Fallback por presencia de headers exclusivos del layout nuevo.
+  const hasNew = headerRow.some((h) => {
+    const n = normHeader(h);
+    return n.includes("pv subtotal") || n.includes("acum tot") || n === "margen";
+  });
+  if (codIdx >= 0 && codIdx !== COLS_OLD.cod && codIdx !== COLS_NEW.cod) {
+    warnings.push(`1_Presupuesto: "Cod. Ítem" en columna inesperada (índice ${codIdx}); usando layout ${hasNew ? "nuevo" : "viejo"}`);
+  }
+  return hasNew ? COLS_NEW : COLS_OLD;
+}
+
 function parsePresupuesto(wb: XLSX.WorkBook, warnings: string[]): ParsedResumen["lineasPresupuesto"] {
   const rows = getSheetRows(wb, "1_Presupuesto", warnings);
   const result: ParsedResumen["lineasPresupuesto"] = [];
   if (rows.length < 4) return result;
 
   // headers en fila 3 (index 2), datos desde fila 4 (index 3)
+  const C = detectPresupuestoCols(rows[2], warnings);
   let seccionActual = "";
   let orden = 0;
 
@@ -344,62 +399,58 @@ function parsePresupuesto(wb: XLSX.WorkBook, warnings: string[]): ParsedResumen[
     const row = rows[i];
     if (!row || row.every((c) => c === null || c === undefined || c === "")) continue;
 
-    // col F (index 5): número de ítem
-    const colF = row[5];
-    if (colF === null || colF === undefined) continue;
+    // columna de código de ítem (varía según layout)
+    const codCell = row[C.cod];
+    if (codCell === null || codCell === undefined) continue;
 
-    // Detectar fila de sección: col F es entero y col G es null
-    if (isSection(row)) {
-      const desc = safeStr(row[7]); // col H = descripción
+    // Fila de sección: código entero (1, 2, 3…) sin punto decimal, con descripción.
+    const codStr = String(codCell).trim();
+    const codNum = Number(codCell);
+    const esSeccion = !isNaN(codNum) && Number.isInteger(codNum) && !codStr.includes(".");
+    if (esSeccion) {
+      const desc = safeStr(row[C.desc]);
       if (desc) seccionActual = desc;
       continue;
     }
 
-    // Fila de ítem: col F tiene punto decimal (1.01, 2.03...)
-    const fStr = String(colF).trim();
-    if (!fStr.includes(".") && !/^\d+\.\d+$/.test(fStr)) {
-      // Not a decimal item number — skip
-      continue;
-    }
+    // Fila de ítem: código con punto decimal (1.01, 2.03…)
+    if (!/^\d+\.\d+/.test(codStr)) continue;
 
-    // col G (index 6): estado — ignorar "IN"
-    const estadoItem = safeStr(row[6]) || "OK";
+    // estado — ignorar "IN"
+    const estadoItem = safeStr(row[C.estado]) || "OK";
     if (estadoItem.toUpperCase() === "IN") continue;
 
     try {
-      const itemNumero = fStr;
-      const descripcion = safeStr(row[7]);   // col H
-      const unidad = safeStr(row[8]);          // col I
-      const cantidad = safeNum(row[9], 0);     // col J
-      const costoMtUd = safeNum(row[10], 0);   // col K
-      const costoMoOtrUd = safeNum(row[11], 0);// col L
-      const costoMoAlbUd = safeNum(row[12], 0);// col M
-      const costoEqUd = safeNum(row[13], 0);   // col N
-      const costoUnitTotal = safeNum(row[14], 0); // col O
-      const pvUd = safeNum(row[15], 0);        // col P
-      // col Q = index 16 (skip)
-      const pvMtUd = safeNum(row[17], 0);      // col R
-      const pvMoOtrUd = safeNum(row[18], 0);   // col S
-      const pvMoAlbUd = safeNum(row[19], 0);   // col T
-      const pvEqUd = safeNum(row[20], 0);      // col U
-      // cols V-AA = indices 21-26 (skip)
-      const etapa = safeStr(row[27]) || null;   // col AB (index 27)
-      const pctAnterior = safeNum(row[28], 0);  // col AC (index 28)
-      const pctActual = safeNum(row[29], 0);    // col AD (index 29)
-      const pctCertificado = safeNum(row[30], 0); // col AE (index 30)
+      const itemNumero = codStr;
+      const descripcion = safeStr(row[C.desc]);
+      const unidad = safeStr(row[C.unidad]);
+      const cantidad = safeNum(row[C.cant], 0);
+      const costoMtUd = safeNum(row[C.cmt], 0);
+      const costoMoOtrUd = safeNum(row[C.cotr], 0);
+      const costoMoAlbUd = safeNum(row[C.calb], 0);
+      const costoEqUd = safeNum(row[C.ceq], 0);
+      const costoUnitTotal = safeNum(row[C.costoUnit], 0);
+      const pvUd = safeNum(row[C.pvUd], 0);
+      const pvMtUd = safeNum(row[C.pvMt], 0);
+      const pvMoOtrUd = safeNum(row[C.pvMoOtr], 0);
+      const pvMoAlbUd = safeNum(row[C.pvMoAlb], 0);
+      const pvEqUd = safeNum(row[C.pvEq], 0);
+      const etapa = safeStr(row[C.etapa]) || null;
+      const pctCertificado = C.pctCert >= 0 ? safeNum(row[C.pctCert], 0) : 0;
 
-      // cols A-D: rubros por componente
-      const rubroMt = safeStr(row[0]) || null;    // col A
-      // col B = rubro MT/Prov (skip for now, same as rubroMt)
-      const rubroMoOtr = safeStr(row[2]) || null; // col C
-      const rubroMoAlb = safeStr(row[3]) || null; // col D
+      // cols A-D: rubros por componente (estables en ambos layouts)
+      const rubroMt = safeStr(row[C.rubroMt]) || null;
+      const rubroMoOtr = safeStr(row[C.rubroMoOtr]) || null;
+      const rubroMoAlb = safeStr(row[C.rubroMoAlb]) || null;
 
       result.push({
         itemNumero,
         descripcion,
         unidad,
         cantidad,
-        rubro: seccionActual,
+        // Agrupación por rubro. Layout viejo: fila-banner de sección. Layout nuevo (v8_12+):
+        // sin banners → se usa la columna Etapa como rubro.
+        rubro: seccionActual || etapa || "",
         etapa: etapa || null,
         estadoItem: estadoItem || "OK",
         orden: orden++,

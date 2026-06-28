@@ -1,0 +1,28 @@
+# NOTA: el Excel de trabajo (archivos/output/) SÍ se versiona en este repo —
+# es la base de datos de la obra y el compañero la necesita. (Antes estaba ignorado.)
+
+# Material archivado (versiones viejas/backups superados; pesado, no se versiona)
+_archivo/
+
+# Python (regenerable)
+__pycache__/
+*.pyc
+*.pyo
+.env
+
+# Logs de runtime del dashboard
+*_srv.log
+dashboard_v2/_srv.log
+
+# Settings locales (por máquina)
+.vscode/settings.json
+.claude/settings.local.json
+
+# Windows / Excel (temporales)
+Thumbs.db
+desktop.ini
+~$*
+
+# Backups intermedios y reportes temp (regenerables; el proyecto limpia versiones superadas)
+_bak_*.xlsx
+scripts/_*_report.txt
