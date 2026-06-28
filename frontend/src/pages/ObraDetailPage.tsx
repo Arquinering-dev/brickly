@@ -9,6 +9,7 @@ import { apiFetch } from "../lib/api";
 import { fmtMoney, fmtNum, fmtPct, fmtDate } from "../lib/format";
 import { CronogramaEditor } from "../components/CronogramaEditor";
 import { CertificacionesTab } from "../components/CertificacionesTab";
+import { AvanceDiarioTab } from "../components/AvanceDiarioTab";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../components/ui/tabs";
 import { Badge } from "../components/ui/badge";
 import { Progress } from "../components/ui/progress";
@@ -171,6 +172,7 @@ export default function ObraDetailPage() {
           <TabsList>
             <TabsTrigger value="resumen">Resumen</TabsTrigger>
             <TabsTrigger value="control">Control</TabsTrigger>
+            <TabsTrigger value="avance">Avance diario</TabsTrigger>
             <TabsTrigger value="certificaciones">Certificaciones</TabsTrigger>
             <TabsTrigger value="presupuesto">Presupuesto</TabsTrigger>
             <TabsTrigger value="planificacion">Planificación</TabsTrigger>
@@ -183,6 +185,10 @@ export default function ObraDetailPage() {
 
           <TabsContent value="control">
             <ControlTab obraId={obra.id} />
+          </TabsContent>
+
+          <TabsContent value="avance">
+            <AvanceDiarioTab obraId={obra.id} />
           </TabsContent>
 
           <TabsContent value="certificaciones">

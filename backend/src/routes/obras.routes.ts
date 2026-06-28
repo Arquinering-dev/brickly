@@ -1156,6 +1156,72 @@ router.post("/:id/avance", async (req: Request, res: Response) => {
   }
 });
 
+// GET /api/obras/:id/avance/diario?mes=&anio= — reportes de avance agrupados por día (calendario).
+// Cada AvanceReporte es lo que el jefe de obra cargó ese día para una tarea (pctIncremento).
+// Se agrupa por fecha en hora Argentina (UTC-3) para que el día del calendario sea el local.
+router.get("/:id/avance/diario", async (req: Request, res: Response) => {
+  try {
+    const obra = await prisma.obra.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, nombre: true, codigo: true },
+    });
+    if (!obra) return res.status(404).json({ error: "Obra no encontrada" });
+
+    const mes = Number(req.query.mes);
+    const anio = Number(req.query.anio);
+    if (!Number.isInteger(mes) || mes < 1 || mes > 12 || !Number.isInteger(anio)) {
+      return res.status(400).json({ error: "mes (1-12) y anio son requeridos" });
+    }
+
+    const OFF = -3 * 3600 * 1000; // ART = UTC-3
+    const artDate = (d: Date) => new Date(d.getTime() + OFF).toISOString().slice(0, 10);
+    // Límites del mes en ART, expresados como instantes UTC.
+    const inicio = new Date(Date.UTC(anio, mes - 1, 1) - OFF);
+    const fin = new Date(Date.UTC(mes === 12 ? anio + 1 : anio, mes === 12 ? 0 : mes, 1) - OFF);
+
+    const reportes = await prisma.avanceReporte.findMany({
+      where: { fecha: { gte: inicio, lt: fin }, linea: { obraId: obra.id } },
+      orderBy: { fecha: "asc" },
+      select: {
+        id: true, fecha: true, pctIncremento: true, cantidad: true, nota: true,
+        linea: {
+          select: {
+            id: true, itemNumero: true, rubro: true, descripcionLibre: true,
+            partida: { select: { descripcion: true, unidad: true } },
+          },
+        },
+      },
+    });
+
+    const diasMap = new Map<string, Array<Record<string, unknown>>>();
+    for (const r of reportes) {
+      const dia = artDate(r.fecha);
+      const arr = diasMap.get(dia) ?? [];
+      arr.push({
+        id: r.id,
+        lineaId: r.linea.id,
+        itemNumero: r.linea.itemNumero,
+        descripcion: r.linea.descripcionLibre ?? r.linea.partida?.descripcion ?? "—",
+        rubro: r.linea.rubro || "GENERAL",
+        unidad: r.linea.partida?.unidad ?? "u",
+        pctIncremento: Number(r.pctIncremento), // fracción 0..1 cargada ese día
+        cantidad: r.cantidad != null ? Number(r.cantidad) : null,
+        nota: r.nota,
+        hora: r.fecha.toISOString(),
+      });
+      diasMap.set(dia, arr);
+    }
+
+    const dias = [...diasMap.entries()]
+      .map(([fecha, tareas]) => ({ fecha, reportes: tareas.length, tareas }))
+      .sort((a, b) => a.fecha.localeCompare(b.fecha));
+
+    res.json({ obra, mes, anio, dias });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Error al obtener avance diario" });
+  }
+});
+
 // ─── Certificaciones de avance (armadas desde la web) ───────────────────────────
 // Valorizadas a precio de venta. Reutilizan Certificacion/CertificacionLinea con fuente='app'
 // colgando de un ContratoCliente sintético (ocId='APP') que el import NO borra.
